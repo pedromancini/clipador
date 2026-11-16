@@ -1,0 +1,118 @@
+# Clipador: monitora as lives do channels.json, manda os melhores momentos no Telegram
+# e (se ligado) posta os picos mais fortes no YouTube Shorts.
+#
+# - A cada 10 min o job "setup" lê o channels.json e gera um job por canal ativo.
+# - Cada job checa se o canal está ao vivo; se não estiver, termina em segundos.
+# - Se estiver, grava/monitora por até ~340 min (o limite de um job é 6h) e encerra limpo.
+# - concurrency por canal: nunca roda dois jobs no mesmo canal; o próximo assume quando este acabar.
+name: clipador
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Link da live (ex.: https://kick.com/gaules). Vazio = todos os canais ativos do channels.json"
+        required: false
+        default: ""
+      max_minutes:
+        description: "Tempo máximo de monitoramento (minutos)"
+        required: false
+        default: "340"
+
+permissions:
+  contents: read
+  actions: write   # para o job se re-disparar quando a live continuar depois das ~6h
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+      has_channels: ${{ steps.m.outputs.has_channels }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - id: m
+        name: Gerar lista de canais
+        # matrix.py só usa a biblioteca padrão: não precisa instalar nada
+        env:
+          CHANNEL_INPUT: ${{ inputs.channel }}
+        run: python -m clipador.matrix --only "$CHANNEL_INPUT"
+
+  clip:
+    needs: setup
+    if: needs.setup.outputs.has_channels == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    concurrency:
+      group: clip-${{ matrix.platform }}-${{ matrix.name }}
+      cancel-in-progress: false
+    env:
+      PYTHONUNBUFFERED: "1"
+      CLIPADOR_MODEL_DIR: /home/runner/.cache/clipador/whisper
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependências Python
+        run: pip install -r requirements.txt
+
+      - id: live
+        name: Está ao vivo?
+        run: python -m clipador --platform ${{ matrix.platform }} --channel ${{ matrix.name }} --check-live
+
+      - name: Instalar ffmpeg (com libass)
+        if: steps.live.outputs.live == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          ffmpeg -hide_banner -filters | grep -q " subtitles " && echo "libass ok"
+          which google-chrome || which chromium || echo "aviso: Chrome não encontrado (Kick pode falhar)"
+
+      - name: Cache do modelo Whisper
+        if: steps.live.outputs.live == 'true'
+        uses: actions/cache@v6
+        with:
+          path: /home/runner/.cache/clipador/whisper
+          key: whisper-${{ hashFiles('channels.json') }}
+          restore-keys: whisper-
+
+      - id: run
+        name: Clipar a live
+        if: steps.live.outputs.live == 'true'
+        run: >
+          python -m clipador --platform ${{ matrix.platform }} --channel ${{ matrix.name }}
+          --max-minutes ${{ inputs.max_minutes || '340' }}
+
+      - name: Backup dos clips (artifact, 3 dias)
+        if: always() && steps.live.outputs.live == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: clips-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}
+          path: clips/*.mp4
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Live continua? Dispara o próximo job
+        if: steps.run.outputs.still_live == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run clipador.yml --ref ${{ github.ref_name }} -f channel=${{ matrix.platform }}/${{ matrix.name }}

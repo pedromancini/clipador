@@ -1,0 +1,44 @@
+{
+  "settings": {
+    "clip_before_seconds": 25,
+    "clip_after_seconds": 12,
+    "max_clip_seconds": 60,
+    "wait_after_peak_seconds": 12,
+
+    "window_seconds": 8,
+    "baseline_seconds": 300,
+    "peak_multiplier": 3.5,
+    "min_msgs": 12,
+    "warmup_seconds": 60,
+    "cooldown_seconds": 90,
+
+    "segment_seconds": 5,
+    "buffer_seconds": 180,
+    "max_quality": 1080,
+    "fps": 30,
+
+    "whisper_model": "base",
+    "language": "pt",
+    "timezone": "America/Sao_Paulo",
+    "hashtags": ["#gta6", "#gta", "#clips", "#cortes", "#fyp", "#viral"],
+
+    "max_runtime_minutes": 340,
+    "max_clips_per_run": 40,
+
+    "youtube": {
+      "enabled": false,
+      "privacy": "public",
+      "min_hype_ratio": 4.0,
+      "max_posts_per_day": 6,
+      "category_id": "20",
+      "made_for_kids": false
+    }
+  },
+  "channels": [
+    {
+      "url": "https://www.twitch.tv/alanzoka",
+      "layout": "blur",
+      "enabled": true
+    }
+  ]
+}
