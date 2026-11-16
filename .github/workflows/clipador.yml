@@ -16,6 +16,10 @@ on:
         description: "Link da live (ex.: https://kick.com/gaules). Vazio = todos os canais ativos do channels.json"
         required: false
         default: ""
+      teste:
+        description: "Teste: gera 1 clip na hora e posta no YouTube como NÃO LISTADO (precisa de link de live)"
+        type: boolean
+        default: false
       max_minutes:
         description: "Tempo máximo de monitoramento (minutos)"
         required: false
@@ -98,9 +102,15 @@ jobs:
       - id: run
         name: Clipar a live
         if: steps.live.outputs.live == 'true'
-        run: >
-          python -m clipador --platform ${{ matrix.platform }} --channel ${{ matrix.name }}
-          --max-minutes ${{ inputs.max_minutes || '340' }}
+        env:
+          TESTE: ${{ inputs.teste && 'true' || 'false' }}
+          MAX_MINUTES: ${{ inputs.max_minutes || '340' }}
+        run: |
+          if [ "$TESTE" = "true" ]; then
+            python -m clipador --platform ${{ matrix.platform }} --channel ${{ matrix.name }}               --once --post-youtube --youtube-privacy unlisted
+          else
+            python -m clipador --platform ${{ matrix.platform }} --channel ${{ matrix.name }}               --max-minutes "$MAX_MINUTES"
+          fi
 
       - name: Backup dos clips (artifact, 3 dias)
         if: always() && steps.live.outputs.live == 'true'

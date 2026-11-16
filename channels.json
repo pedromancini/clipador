@@ -26,7 +26,7 @@
     "max_clips_per_run": 40,
 
     "youtube": {
-      "enabled": false,
+      "enabled": true,
       "privacy": "public",
       "min_hype_ratio": 4.0,
       "max_posts_per_day": 6,

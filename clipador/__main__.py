@@ -46,6 +46,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-minutes", type=float, default=None, help="tempo máximo de monitoramento")
     ap.add_argument("--post-youtube", action="store_true",
                     help="com --once: posta o clip de teste no YouTube também (se o YouTube estiver ligado)")
+    ap.add_argument("--youtube-privacy", choices=["public", "unlisted", "private"], default=None,
+                    help="sobrescreve settings.youtube.privacy (ex.: unlisted pra testar)")
     ap.add_argument("--layout", choices=["blur", "facecam", "crop"], default=None, help="sobrescreve o layout")
     ap.add_argument("--out", default=str(ROOT / "clips"), help="pasta dos clips gerados")
     ap.add_argument("--work", default=str(ROOT / "work"), help="pasta temporária (segmentos)")
@@ -70,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as e:
         print(f"Erro: {e}", file=sys.stderr)
         return 2
+    if args.youtube_privacy:
+        cfg.settings["youtube"]["privacy"] = args.youtube_privacy
     if args.layout:
         channel.layout = args.layout
         if args.layout == "facecam" and channel.facecam is None:
