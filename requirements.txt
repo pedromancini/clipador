@@ -6,4 +6,5 @@ av==17.1.0               # decodificação de áudio do faster-whisper
 curl_cffi==0.13.0        # API da Kick atrás do Cloudflare (imita o TLS do Chrome)
 websockets==15.0.1       # chat da Kick (Pusher)
 requests==2.34.2         # Bot API do Telegram
+opencv-python-headless==4.14.0.94  # acha a facecam sozinho ("facecam": "auto")
 tzdata==2026.6           # fuso horário (America/Sao_Paulo) também no Windows

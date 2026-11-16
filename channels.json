@@ -17,6 +17,8 @@
     "max_quality": 1080,
     "fps": 30,
 
+    "subtitle_size": 80,
+    "subtitle_position": "middle",
     "whisper_model": "base",
     "language": "pt",
     "timezone": "America/Sao_Paulo",
@@ -37,7 +39,8 @@
   "channels": [
     {
       "url": "https://www.twitch.tv/alanzoka",
-      "layout": "blur",
+      "layout": "facecam",
+      "facecam": "auto",
       "enabled": true
     }
   ]

@@ -110,8 +110,17 @@ def _clean(text: str) -> str:
 
 
 def build_ass(words: list[Word], clip_duration: float, width: int = 1080, height: int = 1920,
-              font_size: int = 124, margin_v: int = 500) -> str:
-    """Monta o arquivo .ass. A palavra falada no momento fica amarela; o bloco entra com um 'pop'."""
+              font_size: int = 124, margin_v: int = 500, center_y: int | None = None) -> str:
+    """Monta o arquivo .ass. A palavra falada no momento fica amarela; o bloco entra com um 'pop'.
+
+    center_y: se informado, a legenda fica centralizada nessa altura (ex.: meio da tela ou divisa
+    cam/jogo no layout facecam); senão fica embaixo, a `margin_v` da borda.
+    """
+    font_size = int(font_size)
+    contorno = max(3, round(font_size * 0.065))
+    sombra = max(1, round(font_size * 0.03))
+    alinhamento = 5 if center_y is not None else 2
+    posicao = rf"\an5\pos({width // 2},{int(center_y)})" if center_y is not None else ""
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -121,7 +130,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: TikTok,{FONT_NAME},{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,0,0,0,0,100,100,2,0,1,8,4,2,60,60,{margin_v},1
+Style: TikTok,{FONT_NAME},{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,0,0,0,0,100,100,2,0,1,{contorno},{sombra},{alinhamento},60,60,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -142,7 +151,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for k, x in enumerate(chunk):
                 t = _clean(x.text)
                 partes.append(r"{\c&H00FFFF&}" + t + r"{\c&HFFFFFF&}" if k == wi else t)
-            efeito = r"{\fscx112\fscy112\t(0,90,\fscx100\fscy100)}" if wi == 0 else ""
+            pop = r"\fscx112\fscy112\t(0,90,\fscx100\fscy100)" if wi == 0 else ""
+            efeito = "{" + posicao + pop + "}" if (posicao or pop) else ""
             linhas.append(f"Dialogue: 0,{_ts(ini)},{_ts(fim)},TikTok,,0,0,0,,{efeito}{' '.join(partes)}")
     return header + "\n".join(linhas) + "\n"
 

@@ -120,6 +120,9 @@ def build_clip(
     with_subtitles: bool = True,
     whisper_model: str = "base",
     language: str = "pt",
+    facecam_auto: bool = False,
+    sub_size: int = 80,
+    sub_position: str = "middle",
 ) -> ClipResult:
     """Gera o clip final. `segments` = lista (epoch_inicio, caminho) ordenada."""
     if not segments:
@@ -138,6 +141,15 @@ def build_clip(
     if duration < 3:
         raise ValueError(f"trecho gravado curto demais ({duration:.1f}s)")
 
+    # ---- facecam automática ----
+    if layout == "facecam" and facecam_auto:
+        from .facecam import detect_facecam
+        achada = detect_facecam(src, offset, duration)
+        if achada:
+            facecam = achada
+        else:
+            layout = "blur"  # sem rosto estável (ex.: tela de loading, streamer saiu): blur não erra
+
     # ---- legenda ----
     words: list[subs.Word] = []
     ass_ok = False
@@ -149,7 +161,12 @@ def build_clip(
                   "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)], cwd=workdir)
             words = subs.transcribe(wav, whisper_model, language)
             if words:
-                (workdir / "subs.ass").write_text(subs.build_ass(words, duration), encoding="utf-8")
+                if sub_position == "middle":
+                    centro = 590 if layout == "facecam" else H // 2  # facecam: base da cam (não cobre o HUD do jogo)
+                else:
+                    centro = None
+                ass = subs.build_ass(words, duration, font_size=sub_size, center_y=centro)
+                (workdir / "subs.ass").write_text(ass, encoding="utf-8")
                 fonts = workdir / "fonts"
                 fonts.mkdir(exist_ok=True)
                 for f in subs.FONTS_DIR.glob("*.ttf"):

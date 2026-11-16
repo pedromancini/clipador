@@ -118,7 +118,9 @@ class ChannelRunner:
             out = self.out_dir / f"{self.ch.slug}_{quando}.mp4"
             res = build_clip(segs, t0, t1 - t0, out, workdir, layout=self.ch.layout, facecam=self.ch.facecam,
                              fps=int(self.s["fps"]), with_subtitles=True,
-                             whisper_model=self.s["whisper_model"], language=self.s["language"])
+                             whisper_model=self.s["whisper_model"], language=self.s["language"],
+                             facecam_auto=self.ch.facecam_auto, sub_size=int(self.s["subtitle_size"]),
+                             sub_position=self.s["subtitle_position"])
             info = self.info or StreamInfo(live=True)
             yt_line = self._maybe_post_youtube(res, peak, info)
             # resumo na página do job (não depende do Telegram)

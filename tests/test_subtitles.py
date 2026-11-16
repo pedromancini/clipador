@@ -58,5 +58,19 @@ class TestLegenda(unittest.TestCase):
         self.assertNotIn("Dialogue:", ass)
 
 
+
+class TestPosicao(unittest.TestCase):
+    def test_meio(self):
+        ass = build_ass(palavras("olha isso"), 5, font_size=80, center_y=590)
+        self.assertIn("Style: TikTok,Anton,80,", ass)
+        self.assertIn(r"\an5\pos(540,590)", ass)
+        self.assertIn(",5,60,60,", ass)  # alinhamento 5 (centro)
+
+    def test_embaixo(self):
+        ass = build_ass(palavras("olha isso"), 5)
+        self.assertNotIn(r"\pos(", ass)
+        self.assertIn(",2,60,60,", ass)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -77,8 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.layout:
         channel.layout = args.layout
         if args.layout == "facecam" and channel.facecam is None:
-            from .config import Facecam
-            channel.facecam = Facecam()
+            channel.facecam_auto = True  # sem posição no config: acha a câmera sozinho
 
     if args.check_live:
         from .stream import get_stream_info

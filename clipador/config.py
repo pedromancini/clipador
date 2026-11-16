@@ -40,6 +40,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "max_quality": 1080,
     "fps": 30,
     # Legenda
+    "subtitle_size": 80,          # tamanho da fonte (1080x1920). 124 = grande, 80 = médio/pequeno
+    "subtitle_position": "middle",  # "middle" (meio; no facecam fica na divisa cam/jogo) ou "bottom"
     "whisper_model": "base",
     "language": "pt",
     "timezone": "America/Sao_Paulo",
@@ -93,6 +95,7 @@ class Channel:
     enabled: bool = True
     kick_chatroom_id: int | None = None
     facecam: Facecam | None = None
+    facecam_auto: bool = False  # "facecam": "auto" -> acha a câmera sozinho em cada clip
     min_msgs: float | None = None
     youtube: bool = True       # false = nunca posta este canal no YouTube (só Telegram)
 
@@ -179,6 +182,7 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         enabled=bool(raw.get("enabled", True)),
         kick_chatroom_id=raw.get("kick_chatroom_id"),
         facecam=Facecam(**fc) if isinstance(fc, dict) else None,
+        facecam_auto=isinstance(fc, str) and fc.strip().lower() == "auto",
         min_msgs=raw.get("min_msgs"),
         youtube=bool(raw.get("youtube", True)),
     )
@@ -193,7 +197,7 @@ def _validate_channel(ch: Channel, where: str) -> None:
         raise ConfigError(f"{where}: name inválido {ch.name!r} (use o slug do canal, ex.: 'gaules')")
     if ch.layout not in LAYOUTS:
         raise ConfigError(f"{where}: layout deve ser um de {LAYOUTS} (veio {ch.layout!r})")
-    if ch.layout == "facecam" and ch.facecam is None:
+    if ch.layout == "facecam" and ch.facecam is None and not ch.facecam_auto:
         ch.facecam = Facecam()  # canto superior esquerdo, padrão
     if ch.facecam:
         ch.facecam.validate(where)
@@ -217,6 +221,8 @@ def _validate_settings(s: dict[str, Any]) -> None:
         raise ConfigError("settings.max_clip_seconds: máximo 60s")
     if s["buffer_seconds"] < s["clip_before_seconds"] + s["clip_after_seconds"] + s["wait_after_peak_seconds"] + 30:
         raise ConfigError("settings.buffer_seconds muito curto para a duração do clip")
+    if s["subtitle_position"] not in ("middle", "bottom"):
+        raise ConfigError("settings.subtitle_position deve ser 'middle' ou 'bottom'")
     if not isinstance(s["hashtags"], list):
         raise ConfigError("settings.hashtags deve ser uma lista")
     s["hashtags"] = [h if str(h).startswith("#") else f"#{h}" for h in s["hashtags"]]

@@ -113,7 +113,7 @@ No repositório: **Settings → Secrets and variables → Actions → New reposi
 | `name` | o slug do canal, como aparece na URL (`twitch.tv/`**`gaules`**, `kick.com/`**`gaules`**) |
 | `layout` | `"blur"` (padrão), `"facecam"` ou `"crop"` (veja abaixo) |
 | `enabled` | `true` pra monitorar, `false` pra pausar sem apagar |
-| `facecam` | *(opcional)* onde fica a câmera, em **frações da tela** (0 a 1): `x`,`y` = canto superior esquerdo, `w`,`h` = largura e altura |
+| `facecam` | *(opcional)* **`"auto"`** = acha a câmera sozinho em cada clip (recomendado: funciona mesmo quando o streamer muda a cam de lugar). Ou a posição fixa em **frações da tela** (0 a 1): `{"x","y","w","h"}` |
 | `min_msgs` | *(opcional)* mínimo de "pontos de hype" em ~8s pra disparar. **Abaixe pra chats pequenos** (ex.: 5–8) |
 | `youtube` | *(opcional)* `false` = este canal nunca vai pro YouTube, só pro Telegram (padrão: `true`) |
 | `kick_chatroom_id` | *(opcional, só Kick)* reserva manual se a API da Kick falhar (veja "Problemas comuns") |
@@ -125,7 +125,10 @@ No repositório: **Settings → Secrets and variables → Actions → New reposi
 | jogo inteiro no centro, fundo desfocado | câmera em cima (1/3), gameplay embaixo (2/3) | corte central 9:16 |
 | funciona em qualquer live (padrão) | melhor pra streamer com cam fixa | bom pra IRL / conteúdo centralizado |
 
-> **Como achar a posição da facecam:** tire um print da live (1920x1080). Se a cam fica de x=0 a x=480 e
+> **`"facecam": "auto"`:** o clipador procura o rosto do streamer (o que fica parado no mesmo lugar) e a moldura da
+> câmera em volta dele. Se não achar um rosto (tela de loading, streamer saiu da cam), aquele clip sai no layout `blur`.
+>
+> **Como achar a posição fixa da facecam:** tire um print da live (1920x1080). Se a cam fica de x=0 a x=480 e
 > de y=0 a y=300 pixels, então `x = 0/1920 = 0`, `y = 0/1080 = 0`, `w = 480/1920 = 0.25`, `h = 300/1080 = 0.28`.
 
 **Settings globais (principais):**
@@ -137,6 +140,8 @@ No repositório: **Settings → Secrets and variables → Actions → New reposi
 | `min_msgs` | 12 | mínimo absoluto (vale pra todos os canais sem `min_msgs` próprio) |
 | `cooldown_seconds` | 90 | intervalo mínimo entre dois clips |
 | `warmup_seconds` | 60 | não clipa no primeiro minuto (o detector ainda está aprendendo o "normal" do chat) |
+| `subtitle_size` | 80 | tamanho da legenda (124 = grande, 80 = médio/pequeno) |
+| `subtitle_position` | `middle` | `middle` = no meio (no `facecam`, na base da câmera, sem cobrir o jogo) ou `bottom` = embaixo |
 | `whisper_model` | `base` | modelo da legenda (`tiny` = mais rápido, `small` = melhor e mais lento) |
 | `hashtags` | `#gta6 #gta #clips...` | hashtags padrão da sugestão (o canal e a categoria entram sozinhos) |
 | `max_runtime_minutes` | 340 | quanto tempo cada job monitora antes de passar a vez |
@@ -304,6 +309,7 @@ clipador/
 │   ├── detector.py   # detecção de picos de hype
 │   ├── subtitles.py  # Whisper -> legenda .ass estilo TikTok
 │   ├── clipper.py    # layouts 9:16, legenda queimada, limite de 50 MB
+│   ├── facecam.py    # acha a câmera do streamer sozinho ("facecam": "auto")
 │   ├── summary.py    # resumo dos clips na página do job
 │   ├── telegram.py   # envio pelo Telegram (opcional)
 │   ├── youtube.py    # postagem automática no YouTube Shorts
