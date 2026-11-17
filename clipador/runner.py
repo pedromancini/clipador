@@ -25,11 +25,12 @@ from pathlib import Path
 from . import summary
 from .chat import make_chat_reader
 from .clipper import build_clip
+from .copywriter import ClipCopy, Copywriter
 from .config import DEFAULT_YOUTUBE, ROOT, Channel, Config, Facecam
 from .detector import HypeDetector, Peak
 from .recorder import Recorder, select_segments
 from .stream import StreamInfo, get_stream_info, make_session
-from .telegram import Telegram, build_caption, build_hashtags, suggest_title
+from .telegram import Telegram, build_caption
 from .youtube import YouTube, build_metadata, decide
 
 log = logging.getLogger("clipador.runner")
@@ -57,6 +58,7 @@ class ChannelRunner:
         self.max_minutes = max_minutes or self.s["max_runtime_minutes"]
         self.yt_settings = self.s.get("youtube") or dict(DEFAULT_YOUTUBE)
         self.yt = youtube or YouTube.from_env(self.s["timezone"])
+        self.copy = Copywriter()        # título/legenda com IA (GEMINI_API_KEY) ou plano B local
         self.post_forced = post_forced   # --post-youtube: posta até o clip de teste (--once)
 
         self.info: StreamInfo | None = None
@@ -151,16 +153,18 @@ class ChannelRunner:
                 self._facecam_last_good = res.facecam_refined
                 self._save_facecam(res.facecam_refined)
             info = self.info or StreamInfo(live=True)
-            yt_line = self._maybe_post_youtube(res, peak, info)
+            # título + legenda + hashtags (IA ouvindo o áudio do clip, ou plano B local)
+            texto = self.copy.make(self.ch.name, res.words, res.transcript, workdir / "audio.wav",
+                                   max(0.0, peak.t - t0), peak.top_messages, info.category, info.title,
+                                   self.s["hashtags"])
+            yt_line = self._maybe_post_youtube(res, peak, info, texto)
             # resumo na página do job (não depende do Telegram)
-            titulo = suggest_title(self.ch.name, res.transcript, peak.top_messages, info.title, info.category)
-            tags = " ".join(build_hashtags(self.s["hashtags"], self.ch.name, info.category))
             try:
                 summary.write_clip(self.out_dir, out.name, peak, self.s["timezone"], yt_line,
-                                   f"{titulo} {tags}", res.transcript)
+                                   f"{texto.titulo} {' '.join(texto.hashtags)}", res.transcript)
             except OSError as e:
                 log.warning("não consegui escrever o resumo: %s", e)
-            self._write_sidecar(out, peak, res, info, titulo, yt_line)
+            self._write_sidecar(out, peak, res, info, texto, yt_line)
             cap = build_caption(self.ch.name, self.ch.platform_label, peak, res.transcript, info.title,
                                 info.category, self.s["hashtags"], self.s["timezone"], youtube_line=yt_line)
             self.tg.send_video(res.path, cap, duration=res.duration)
@@ -174,7 +178,7 @@ class ChannelRunner:
             rec.release(token)
             shutil.rmtree(workdir, ignore_errors=True)
 
-    def _write_sidecar(self, out: Path, peak: Peak, res, info: StreamInfo, titulo: str,
+    def _write_sidecar(self, out: Path, peak: Peak, res, info: StreamInfo, texto: ClipCopy,
                        yt_line: str | None) -> None:
         """<clip>.json ao lado do vídeo: dados que o baixador do TikTok usa (legenda, horário, hype)."""
         yt_url = None
@@ -187,8 +191,12 @@ class ChannelRunner:
             "url_canal": self.ch.url,
             "pico_epoch": peak.t,
             "hype": None if peak.ratio == float("inf") else round(peak.ratio, 1),
-            "titulo": titulo,
-            "hashtags": build_hashtags(self.s["hashtags"], self.ch.name, info.category),
+            "titulo": texto.titulo,
+            "legenda": texto.legenda,
+            "hashtags": texto.hashtags,
+            "viral": texto.viral,
+            "sobre_gta6": texto.sobre_gta6,
+            "texto_por": texto.fonte,
             "categoria": info.category,
             "titulo_live": info.title,
             "fala": res.transcript[:500],
@@ -200,7 +208,7 @@ class ChannelRunner:
         except OSError as e:
             log.warning("não consegui salvar os dados do clip: %s", e)
 
-    def _maybe_post_youtube(self, res, peak: Peak, info: StreamInfo) -> str | None:
+    def _maybe_post_youtube(self, res, peak: Peak, info: StreamInfo, texto: ClipCopy) -> str | None:
         """Posta no YouTube Shorts se passar no filtro. Devolve a linha que vai na mensagem do Telegram."""
         ys = self.yt_settings
         if not ys.get("enabled"):
@@ -213,10 +221,9 @@ class ChannelRunner:
             if not d.post:
                 log.info("YouTube: não postado (%s)", d.reason)
                 return f"⏭️ YouTube: {d.reason}"
-            titulo = suggest_title(self.ch.name, res.transcript, peak.top_messages, info.title, info.category)
-            tags = build_hashtags(self.s["hashtags"], self.ch.name, info.category)
-            meta = build_metadata(titulo, self.ch.name, self.ch.platform_label, self.ch.url, tags,
-                                  self.ch.platform, ys["category_id"], ys["privacy"], ys["made_for_kids"])
+            meta = build_metadata(texto.titulo, self.ch.name, self.ch.platform_label, self.ch.url, texto.hashtags,
+                                  self.ch.platform, ys["category_id"], ys["privacy"], ys["made_for_kids"],
+                                  hook=texto.legenda if texto.legenda != texto.titulo else None)
             url = self.yt.upload(res.path, meta, self.ch.platform, self.ch.name)
             extra = " 🔥 post extra" if d.extreme else ""
             return f"▶️ Postado no YouTube ({st.today + 1}º hoje, {d.reason}){extra}: {url}"

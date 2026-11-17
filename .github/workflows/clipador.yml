@@ -61,6 +61,7 @@ jobs:
       cancel-in-progress: false
     env:
       PYTHONUNBUFFERED: "1"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       CLIPADOR_MODEL_DIR: /home/runner/.cache/clipador/whisper
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

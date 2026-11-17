@@ -53,6 +53,11 @@ class Clip:
     dados: dict        # conteúdo do .json (pode ser vazio em clips antigos)
 
     @property
+    def viral(self) -> float:
+        v = self.dados.get("viral")
+        return float(v) if isinstance(v, (int, float)) else -1.0
+
+    @property
     def hype(self) -> float:
         h = self.dados.get("hype")
         return float(h) if isinstance(h, (int, float)) else 0.0
@@ -124,8 +129,10 @@ def proximos_horarios(agora: datetime, horarios: list[str], ocupados: set[str], 
 
 
 def agendar(clips: list[Clip], livres: list[datetime]) -> list[tuple[Clip, datetime | None]]:
-    """O clip mais quente vai no horário livre mais cedo (notícia velha esfria). Sobra = None (extras)."""
-    ordem = sorted(clips, key=lambda c: (-c.hype, c.quando or datetime.min))
+    """O melhor clip vai no horário livre mais cedo (notícia velha esfria). Sobra = None (extras).
+
+    Ordem: nota de viralidade da IA (quando tem), depois o quanto o chat agitou."""
+    ordem = sorted(clips, key=lambda c: (-c.viral, -c.hype, c.quando or datetime.min))
     out = []
     for i, c in enumerate(ordem):
         out.append((c, livres[i] if i < len(livres) else None))
@@ -152,7 +159,9 @@ def legenda(c: Clip) -> str:
     tags = d.get("hashtags") or [*carregar_hashtags(), f"#{canal}"][:8]
     url = d.get("url_canal") or {"twitch": f"twitch.tv/{canal}", "kick": f"kick.com/{canal}"}.get(plataforma, "")
     credito = f"Créditos: {url.replace('https://', '').replace('www.', '')}" if url else f"Créditos: {canal}"
-    return f"{titulo}\n\n{credito}\n\n{' '.join(tags)}"
+    gancho = (d.get("legenda") or "").strip()
+    corpo = gancho if gancho and gancho != titulo else titulo
+    return f"{corpo}\n\n{credito}\n\n{' '.join(tags)}"
 
 
 def texto_txt(c: Clip, quando: datetime | None) -> str:
@@ -167,6 +176,8 @@ def texto_txt(c: Clip, quando: datetime | None) -> str:
         linhas.append(f"Momento da live: {q:%d/%m às %H:%M}")
     if c.hype:
         linhas.append(f"Chat: {c.hype:.1f}x mais agitado que o normal")
+    if c.viral >= 0:
+        linhas.append(f"Nota de viralidade (IA): {c.viral:g}/10")
     if c.dados.get("youtube"):
         linhas.append(f"Também postado no YouTube: {c.dados['youtube']}")
     if c.dados.get("fala"):

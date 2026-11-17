@@ -88,8 +88,16 @@ No repositório: **Settings → Secrets and variables → Actions → New reposi
 | `TELEGRAM_BOT_TOKEN` | *(opcional)* o token do BotFather |
 | `TELEGRAM_CHAT_ID` | *(opcional)* o seu chat_id |
 | `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` / `YOUTUBE_REFRESH_TOKEN` | *(opcional)* veja o passo 7 |
+| `GEMINI_API_KEY` | *(recomendado)* chave grátis em [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
 > Os secrets ficam escondidos mesmo com o repositório público. Nunca coloque o token direto no código.
+
+**Títulos e legendas com IA (`GEMINI_API_KEY`):** o Gemini ouve o áudio de cada clip e lê o que o chat
+mandou. Com isso ele escreve o título do Short, a legenda do TikTok (gancho + pergunta), as hashtags do assunto
+(`#gta6` só quando o clip é mesmo sobre GTA 6) e uma nota de viralidade de 0 a 10. Essa nota decide quais clips
+ficam com os melhores horários do TikTok. A faixa grátis do Gemini aguenta com folga ~100 clips por dia. Sem a
+chave, ou se a IA falhar, entra o plano B, que escreve uma chamada conforme a reação do chat (risada, choque,
+derrota). Ele nunca cita a transcrição automática, porque ela erra muito em live.
 
 ### 5. Editar o `channels.json`
 

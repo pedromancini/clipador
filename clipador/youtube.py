@@ -44,7 +44,7 @@ def marker(platform: str, name: str) -> str:
 
 def build_metadata(title: str, channel_name: str, platform_label: str, channel_url: str,
                    hashtags: list[str], platform: str, category_id: str, privacy: str,
-                   made_for_kids: bool) -> dict:
+                   made_for_kids: bool, hook: str | None = None) -> dict:
     """Título (máx. 100 caracteres, com #Shorts), descrição com crédito ao streamer e tags."""
     titulo = re.sub(r"[<>]", "", title).strip()
     sufixo = " #Shorts"
@@ -53,6 +53,7 @@ def build_metadata(title: str, channel_name: str, platform_label: str, channel_u
     titulo += sufixo
     tags_txt = " ".join(hashtags)
     descricao = (
+        (f"{hook.strip()}\n\n" if hook and hook.strip() else "") +
         f"Clip da live de {channel_name} na {platform_label}.\n"
         f"Assista ao vivo: {channel_url}\n\n"
         f"{tags_txt} #shorts\n\n"
