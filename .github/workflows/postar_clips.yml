@@ -1,0 +1,59 @@
+# Posta no YouTube clips JÁ PRONTOS de uma execução anterior (pega do artifact daquela execução).
+# Disparo manual: Actions -> "postar clips prontos" -> Run workflow.
+# Os posts não contam no limite de 2/h da live (marca "clipador:extra/<canal>").
+name: postar clips prontos
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "ID da execução do clipador que gerou os clips (artifact ainda válido, 3 dias)"
+        required: true
+      lista:
+        description: 'JSON: [{"arquivo": "twitch-x_20261116-211240.mp4", "titulo": "...", "legenda": "...", "hashtags": ["#x"]}]'
+        required: true
+      intervalo:
+        description: "Minutos entre um post e outro"
+        default: "20"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  postar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      PYTHONUNBUFFERED: "1"
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependências Python
+        run: pip install -r requirements.txt
+
+      - name: Baixar os clips da execução
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -D baixados
+          mkdir -p clips && find baixados -name '*.mp4' -exec mv {} clips/ \;
+          ls clips
+
+      - name: Postar
+        env:
+          LISTA: ${{ inputs.lista }}
+          INTERVALO: ${{ inputs.intervalo }}
+        run: |
+          printf '%s' "$LISTA" > lista.json
+          python -m clipador.postar_lote --dir clips --lista lista.json --intervalo "$INTERVALO"

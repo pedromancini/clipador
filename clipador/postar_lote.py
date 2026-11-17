@@ -1,0 +1,90 @@
+"""Posta no YouTube uma lista de clips JÁ PRONTOS (ex.: os de uma live anterior), um de cada vez.
+
+Usado pelo workflow "postar_clips.yml". Os posts levam a marca "clipador:extra/<canal>", então NÃO
+entram na conta dos 2 por hora da live: se o canal estiver ao vivo, os posts automáticos continuam.
+
+Lista (JSON):  [{"arquivo": "twitch-alanzoka_20261116-211240.mp4", "titulo": "...", "legenda": "...",
+                 "hashtags": ["#alanzoka", "#gta6"]}, ...]
+
+Rodar:  python -m clipador.postar_lote --dir clips --lista lista.json --intervalo 20
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import re
+import sys
+import time
+from pathlib import Path
+
+from .config import load_config
+from .youtube import YouTube, build_metadata, marker
+
+log = logging.getLogger("clipador.postar_lote")
+
+_NOME_RE = re.compile(r"^(twitch|kick)-([A-Za-z0-9_\-]+?)_\d{8}-\d{6}\.mp4$")
+
+
+def metadados(item: dict, settings: dict) -> tuple[dict, str, str]:
+    """Metadados do YouTube para um item da lista. Retorna (metadata, plataforma, canal)."""
+    m = _NOME_RE.match(item["arquivo"])
+    if not m:
+        raise ValueError(f"nome de arquivo inesperado: {item['arquivo']}")
+    platform, name = m.group(1), m.group(2).lower()
+    ch = load_config().channel_or_default(platform, name)
+    ys = settings["youtube"]
+    tags = item.get("hashtags") or [f"#{name}"] + [t for t in settings.get("hashtags", []) if "gta" not in t]
+    legenda = (item.get("legenda") or "").strip()
+    meta = build_metadata(item["titulo"], ch.name, ch.platform_label, ch.url, tags, platform,
+                          ys["category_id"], item.get("privacy") or ys["privacy"], ys["made_for_kids"],
+                          hook=legenda if legenda and legenda != item["titulo"] else None)
+    desc = meta["snippet"]["description"]
+    meta["snippet"]["description"] = desc.replace(marker(platform, ch.name), marker("extra", ch.name))
+    return meta, platform, name
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dir", default="clips", help="pasta com os .mp4")
+    ap.add_argument("--lista", required=True, help="arquivo JSON com a lista (ou o próprio JSON)")
+    ap.add_argument("--intervalo", type=float, default=20, help="minutos entre um post e outro")
+    args = ap.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+
+    bruto = args.lista
+    if not bruto.lstrip().startswith("["):
+        bruto = Path(bruto).read_text(encoding="utf-8")
+    lista = json.loads(bruto)
+    settings = load_config().settings
+    yt = YouTube.from_env(settings.get("timezone", "America/Sao_Paulo"))
+    if not yt.configured:
+        log.error("faltam os secrets do YouTube (YOUTUBE_CLIENT_ID / _SECRET / _REFRESH_TOKEN)")
+        return 1
+
+    pasta = Path(args.dir)
+    falhas = 0
+    for i, item in enumerate(lista):
+        video = pasta / item["arquivo"]
+        if not video.exists():
+            log.error("não achei %s, pulando", video)
+            falhas += 1
+            continue
+        try:
+            meta, platform, name = metadados(item, settings)
+            url = yt.upload(video, meta, platform, name)
+            print(f"▶️ {i + 1}/{len(lista)} {meta['snippet']['title']}  {url}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            log.error("falhou %s: %s", item["arquivo"], e)
+            falhas += 1
+            if "cota" in str(e):
+                break
+            continue
+        if i < len(lista) - 1 and args.intervalo > 0:
+            log.info("próximo em %.0f min", args.intervalo)
+            time.sleep(args.intervalo * 60)
+    return 1 if falhas == len(lista) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
