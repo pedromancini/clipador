@@ -181,8 +181,8 @@ class ChannelRunner:
         if not self.yt.configured:
             return "⚠️ YouTube ligado no channels.json, mas faltam os secrets YOUTUBE_*"
         try:
-            hoje = self.yt.posted_today(self.ch.platform, self.ch.name)
-            d = decide(ys, self.ch.youtube, peak.ratio, peak.forced, hoje, allow_forced=self.post_forced)
+            st = self.yt.stats(self.ch.platform, self.ch.name)
+            d = decide(ys, self.ch.youtube, peak.ratio, peak.forced, st, allow_forced=self.post_forced)
             if not d.post:
                 log.info("YouTube: não postado (%s)", d.reason)
                 return f"⏭️ YouTube: {d.reason}"
@@ -191,7 +191,8 @@ class ChannelRunner:
             meta = build_metadata(titulo, self.ch.name, self.ch.platform_label, self.ch.url, tags,
                                   self.ch.platform, ys["category_id"], ys["privacy"], ys["made_for_kids"])
             url = self.yt.upload(res.path, meta, self.ch.platform, self.ch.name)
-            return f"▶️ Postado no YouTube ({hoje + 1}/{ys['max_posts_per_day']} hoje): {url}"
+            extra = " 🔥 post extra" if d.extreme else ""
+            return f"▶️ Postado no YouTube ({st.today + 1}º hoje, {d.reason}){extra}: {url}"
         except Exception as e:  # noqa: BLE001
             log.exception("YouTube falhou")
             self.tg.send_error(f"{self.ch.slug}: postagem no YouTube falhou: {e}", min_interval=1800)
@@ -226,7 +227,7 @@ class ChannelRunner:
         modo = "🧪 teste (--once)" if self.once else f"até {self.max_minutes:.0f} min"
         if self.yt_settings.get("enabled") and self.ch.youtube:
             modo += (f" · YouTube auto (≥{self.yt_settings['min_hype_ratio']:g}x, "
-                     f"máx {self.yt_settings['max_posts_per_day']}/dia)")
+                     f"{self.yt_settings['posts_per_hour']}/h, máx {self.yt_settings['max_posts_per_day']}/dia)")
         await asyncio.to_thread(self._safe_send, (
             f"🔴 <b>Monitorando {html.escape(self.ch.name)}</b> ({self.ch.platform_label})\n"
             f"{html.escape(info.title or '')}\n🎮 {html.escape(info.category or '-')} · {info.quality} · {modo}\n"

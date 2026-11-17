@@ -55,8 +55,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 DEFAULT_YOUTUBE: dict[str, Any] = {
     "enabled": False,          # liga/desliga a postagem automática
     "privacy": "public",       # public | unlisted | private
-    "min_hype_ratio": 4.0,     # só posta se o pico for >= N vezes o normal do chat
-    "max_posts_per_day": 6,    # por canal monitorado
+    "min_hype_ratio": 4.0,     # só posta se o auge do pico for >= N vezes o normal do chat
+    "posts_per_hour": 2,       # ritmo normal: até N posts por hora...
+    "min_minutes_between_posts": 20,  # ...espaçados (não solta 2 seguidos)
+    "extreme_hype_ratio": 8.0,  # chat MUITO acima do normal (>= N vezes)...
+    "extreme_posts_per_hour": 3,  # ...libera um post extra na hora, sem esperar o espaçamento
+    "max_posts_per_day": 50,   # teto diário por canal monitorado
     "category_id": "20",       # 20 = Jogos, 24 = Entretenimento
     "made_for_kids": False,
 }
@@ -233,8 +237,11 @@ def _validate_settings(s: dict[str, Any]) -> None:
         raise ConfigError("settings.youtube.privacy deve ser 'public', 'unlisted' ou 'private'")
     if not isinstance(yt["min_hype_ratio"], (int, float)) or yt["min_hype_ratio"] < 0:
         raise ConfigError("settings.youtube.min_hype_ratio deve ser um número >= 0")
-    if not isinstance(yt["max_posts_per_day"], int) or yt["max_posts_per_day"] < 0:
-        raise ConfigError("settings.youtube.max_posts_per_day deve ser um inteiro >= 0")
+    for k in ("max_posts_per_day", "posts_per_hour", "extreme_posts_per_hour", "min_minutes_between_posts"):
+        if not isinstance(yt[k], int) or isinstance(yt[k], bool) or yt[k] < 0:
+            raise ConfigError(f"settings.youtube.{k} deve ser um inteiro >= 0")
+    if not isinstance(yt["extreme_hype_ratio"], (int, float)) or yt["extreme_hype_ratio"] < yt["min_hype_ratio"]:
+        raise ConfigError("settings.youtube.extreme_hype_ratio deve ser um número >= min_hype_ratio")
     yt["enabled"] = bool(yt["enabled"])
     s["youtube"] = yt
 

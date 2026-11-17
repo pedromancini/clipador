@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from clipador.config import DEFAULT_YOUTUBE
-from clipador.youtube import YouTube, YouTubeError, build_metadata, decide, marker
+from clipador.youtube import PostStats, YouTube, YouTubeError, build_metadata, decide, marker
 
 
 def resp(status=200, body=None, headers=None):
@@ -47,6 +47,26 @@ class TestDecisao(unittest.TestCase):
         d = decide(self.ys(max_posts_per_day=6), True, 9, False, 6)
         self.assertFalse(d.post)
         self.assertIn("limite", d.reason)
+
+    def test_ritmo_2_por_hora(self):
+        ys = self.ys()
+        self.assertTrue(decide(ys, True, 5, False, PostStats(today=3, last_hour=1, minutes_since_last=25)).post)
+        d = decide(ys, True, 5, False, PostStats(today=3, last_hour=2, minutes_since_last=25))
+        self.assertFalse(d.post)
+        self.assertIn("última hora", d.reason)
+
+    def test_espacamento(self):
+        d = decide(self.ys(), True, 5, False, PostStats(today=1, last_hour=1, minutes_since_last=8))
+        self.assertFalse(d.post)
+        self.assertIn("espera 20 min", d.reason)
+
+    def test_chat_explodiu_libera_terceiro(self):
+        st = PostStats(today=4, last_hour=2, minutes_since_last=3)
+        d = decide(self.ys(), True, 9.5, False, st)
+        self.assertTrue(d.post)
+        self.assertTrue(d.extreme)
+        st.last_hour = 3
+        self.assertFalse(decide(self.ys(), True, 9.5, False, st).post)
 
     def test_teste_once(self):
         self.assertFalse(decide(self.ys(), True, 0, True, 0).post)
@@ -91,6 +111,11 @@ class TestApi(unittest.TestCase):
         self.assertEqual(yt.posted_today("kick", "gaules"), 1)
         self.assertEqual(yt.posted_today("kick", "gaules"), 1)  # em cache: não consulta de novo
         self.assertEqual(req.get.call_count, 2)
+        st = yt.stats("kick", "gaules")
+        self.assertEqual(st.last_hour, 1)
+        self.assertLess(st.minutes_since_last, 1)
+        yt._increment("kick", "gaules")
+        self.assertEqual(yt.stats("kick", "gaules").last_hour, 2)
 
     @mock.patch("clipador.youtube.requests")
     def test_upload_resumavel(self, req):

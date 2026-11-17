@@ -130,5 +130,26 @@ class TestDeteccao(unittest.TestCase):
         self.assertEqual(p.top_messages[0][0], "CLIP")
 
 
+class TestAuge(unittest.TestCase):
+    def test_ratio_usa_o_auge_do_pico(self):
+        from clipador.detector import HypeDetector
+        d = HypeDetector(window_seconds=4, baseline_seconds=60, peak_multiplier=3, min_msgs=5,
+                         warmup_seconds=10, cooldown_seconds=30)
+        t0 = 1_000_000
+        for s in range(30):              # chat normal: 2 msgs/s
+            for _ in range(2):
+                d.add("oi", t0 + s)
+            d.tick(t0 + s + 1)
+        pico = None
+        for s in range(30, 45):          # explode: 10 -> 40 msgs/s
+            for _ in range(10 if s < 33 else 40):
+                d.add("oi", t0 + s)
+            p = d.tick(t0 + s + 1)
+            pico = pico or p
+        self.assertIsNotNone(pico)
+        self.assertGreater(pico.max_score, pico.score)
+        self.assertGreater(pico.ratio, pico.score / pico.baseline)
+
+
 if __name__ == "__main__":
     unittest.main()

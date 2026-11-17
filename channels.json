@@ -31,7 +31,11 @@
       "enabled": true,
       "privacy": "public",
       "min_hype_ratio": 4.0,
-      "max_posts_per_day": 6,
+      "posts_per_hour": 2,
+      "min_minutes_between_posts": 20,
+      "extreme_hype_ratio": 8.0,
+      "extreme_posts_per_hour": 3,
+      "max_posts_per_day": 50,
       "category_id": "20",
       "made_for_kids": false
     }

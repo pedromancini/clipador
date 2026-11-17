@@ -196,7 +196,11 @@ No fim, o terminal mostra 3 valores.
   "enabled": true,
   "privacy": "public",
   "min_hype_ratio": 4.0,
-  "max_posts_per_day": 6,
+  "posts_per_hour": 2,
+  "min_minutes_between_posts": 20,
+  "extreme_hype_ratio": 8.0,
+  "extreme_posts_per_hour": 3,
+  "max_posts_per_day": 50,
   "category_id": "20",
   "made_for_kids": false
 }
@@ -206,8 +210,12 @@ No fim, o terminal mostra 3 valores.
 |---|---|
 | `enabled` | liga/desliga a postagem automática |
 | `privacy` | `public`, `unlisted` (não listado, bom pra testar) ou `private` |
-| `min_hype_ratio` | só posta se o pico for ≥ N vezes o normal do chat. **Maior = só os momentos mais insanos** |
-| `max_posts_per_day` | máximo de Shorts por dia **por canal monitorado** (conta pelo fuso de `timezone`) |
+| `min_hype_ratio` | só posta se o auge do pico for ≥ N vezes o normal do chat. **Maior = só os momentos mais insanos** |
+| `posts_per_hour` | ritmo normal: até N Shorts por hora (contando a última hora corrida) |
+| `min_minutes_between_posts` | espaço mínimo entre dois posts normais (evita soltar 2 seguidos) |
+| `extreme_hype_ratio` | quando o chat passa de N vezes o normal, é um momento fora da curva... |
+| `extreme_posts_per_hour` | ...e libera um post extra na hora (ex.: 3 em vez de 2), sem esperar o espaçamento |
+| `max_posts_per_day` | teto de Shorts por dia **por canal monitorado** (conta pelo fuso de `timezone`) |
 | `category_id` | `20` = Jogos, `24` = Entretenimento |
 
 Quer que um canal nunca vá pro YouTube (só Telegram)? Coloque `"youtube": false` nele.
@@ -270,8 +278,10 @@ Os clips ficam em `clips/`, com um `clips/RESUMO.md` (título e hashtags de cada
   um app sem auditoria só consegue postar como **privado**, e o TikTok **não aprova** ferramentas pessoais
   ("utility tool to help upload contents to the account(s) you or your team manages"). Robôs que fingem
   ser você no navegador violam os termos do TikTok e podem banir a conta. Por isso o TikTok fica semiautomático.
-- **YouTube:** a API permite 100 uploads por dia por projeto. O `max_posts_per_day` fica bem abaixo disso de
-  propósito, porque postar demais derruba o alcance do canal.
+- **YouTube:** a API permite 100 uploads por dia por projeto. O ritmo padrão (2 por hora, espaçados, com um
+  extra quando o chat explode) fica abaixo disso de propósito: rajadas de vídeos derrubam o alcance do canal.
+  O YouTube também tem um limite de uploads por canal por dia que não é divulgado (canal verificado por
+  telefone aguenta mais).
 - **Direitos e Content ID:** o conteúdo é dos streamers. Música tocando na live pode gerar reivindicação de
   direitos autorais no YouTube, e o streamer pode pedir remoção (strike). Por isso: **use um canal separado**, mantenha o
   crédito e o link na descrição (o clipador já faz isso) e respeite quem não quer cortes.

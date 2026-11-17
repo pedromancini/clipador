@@ -94,10 +94,13 @@ class Peak:
     threshold: float         # limiar usado
     top_messages: list[tuple[str, int]] = field(default_factory=list)
     forced: bool = False     # True quando foi forçado (modo --once)
+    max_score: float = 0.0   # maior score nos segundos seguintes (o auge do hype, atualizado pelo detector)
 
     @property
     def ratio(self) -> float:
-        return self.score / self.baseline if self.baseline > 0 else float("inf")
+        """Quantas vezes o chat ficou acima do normal no AUGE do pico (não só no disparo)."""
+        topo = max(self.score, self.max_score)
+        return topo / self.baseline if self.baseline > 0 else float("inf")
 
 
 class HypeDetector:
@@ -123,6 +126,8 @@ class HypeDetector:
         self._start: int | None = None
         self._next_second: int | None = None               # próximo segundo a ser processado
         self._cooldown_until: int = 0
+        self._active: Peak | None = None                   # último pico (acompanha até o auge)
+        self.follow_seconds = 20                           # por quanto tempo acompanha o auge
         self.total_messages = 0
         self.last_score = 0.0
         self.last_baseline = 0.0
@@ -190,12 +195,19 @@ class HypeDetector:
             base = self.baseline()
             limiar = max(self.min_msgs, base * self.multiplier)
             self.last_score, self.last_baseline = score, base
+            if self._active is not None:
+                if sec <= self._active.t + self.follow_seconds:
+                    self._active.max_score = max(self._active.max_score, round(score, 1))
+                else:
+                    self._active = None
 
             aquecido = sec - self._start >= self.warmup
             if pico is None and aquecido and sec >= self._cooldown_until and score >= limiar:
                 pico = Peak(t=float(sec), score=round(score, 1), baseline=round(base, 1),
-                            threshold=round(limiar, 1), top_messages=self._top_messages(sec))
+                            threshold=round(limiar, 1), top_messages=self._top_messages(sec),
+                            max_score=round(score, 1))
                 self._cooldown_until = sec + self.cooldown
+                self._active = pico
             self._history.append(score)
             self._cleanup(sec)
         return pico

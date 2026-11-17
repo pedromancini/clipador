@@ -3,10 +3,12 @@
 Secrets / variáveis de ambiente (gerados uma vez com `python -m clipador.youtube_auth`):
     YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN
 
-Só posta os picos mais fortes (settings.youtube.min_hype_ratio) e no máximo
-settings.youtube.max_posts_per_day por canal. A contagem do dia é feita consultando os próprios
-uploads do canal no YouTube (cada vídeo leva uma marca "clipador:<plataforma>/<canal>" na descrição),
-então funciona mesmo com cada job do Actions começando do zero.
+Só posta os picos mais fortes (settings.youtube.min_hype_ratio), num ritmo de posts_per_hour por hora
+(espaçados por min_minutes_between_posts); quando o chat explode (extreme_hype_ratio) libera um post
+extra na hora (extreme_posts_per_hour). Teto de max_posts_per_day por canal. As contagens são feitas
+consultando os próprios uploads do canal no YouTube (cada vídeo leva uma marca
+"clipador:<plataforma>/<canal>" na descrição), então funcionam mesmo com cada job do Actions
+começando do zero.
 """
 from __future__ import annotations
 
@@ -69,24 +71,51 @@ def build_metadata(title: str, channel_name: str, platform_label: str, channel_u
 class PostDecision:
     post: bool
     reason: str
+    extreme: bool = False
 
 
-def decide(yt_settings: dict, channel_allows: bool, ratio: float, forced: bool, posted_today: int,
+@dataclass
+class PostStats:
+    """Posts recentes deste canal monitorado no YouTube."""
+    today: int = 0
+    last_hour: int = 0
+    minutes_since_last: float | None = None   # None = nenhum post nas últimas 24h
+
+
+def decide(yt_settings: dict, channel_allows: bool, ratio: float, forced: bool, stats: PostStats | int,
            allow_forced: bool = False) -> PostDecision:
-    """Decide se este clip vai pro YouTube (e o porquê, que aparece no Telegram)."""
+    """Decide se este clip vai pro YouTube (e o porquê, que aparece no resumo)."""
+    if isinstance(stats, int):
+        stats = PostStats(today=stats)
     if not yt_settings.get("enabled"):
         return PostDecision(False, "postagem no YouTube desligada")
     if not channel_allows:
         return PostDecision(False, "YouTube desligado para este canal")
     if forced and not allow_forced:
         return PostDecision(False, "clip de teste (--once) não é postado")
-    minimo = float(yt_settings.get("min_hype_ratio", 4.0))
-    if not forced and ratio < minimo:
-        return PostDecision(False, f"hype {ratio:.1f}x < {minimo:g}x (só pra revisão)")
-    limite = int(yt_settings.get("max_posts_per_day", 6))
-    if posted_today >= limite:
+    limite = int(yt_settings.get("max_posts_per_day", 50))
+    if stats.today >= limite:
         return PostDecision(False, f"limite de {limite} posts hoje atingido")
-    return PostDecision(True, "ok")
+    if forced:
+        return PostDecision(True, "teste")
+    minimo = float(yt_settings.get("min_hype_ratio", 4.0))
+    if ratio < minimo:
+        return PostDecision(False, f"hype {ratio:.1f}x < {minimo:g}x (só pra revisão)")
+
+    extremo = ratio >= float(yt_settings.get("extreme_hype_ratio", 8.0))
+    por_hora = int(yt_settings.get("posts_per_hour", 2))
+    if extremo:
+        teto = max(por_hora, int(yt_settings.get("extreme_posts_per_hour", 3)))
+        if stats.last_hour >= teto:
+            return PostDecision(False, f"hype {ratio:.1f}x (explodiu), mas já foram {stats.last_hour} "
+                                       "posts na última hora")
+        return PostDecision(True, f"hype {ratio:.1f}x, chat explodiu", extreme=True)
+    if stats.last_hour >= por_hora:
+        return PostDecision(False, f"já foram {stats.last_hour} posts na última hora (ritmo: {por_hora}/h)")
+    espaco = int(yt_settings.get("min_minutes_between_posts", 20))
+    if stats.minutes_since_last is not None and stats.minutes_since_last < espaco:
+        return PostDecision(False, f"último post há {stats.minutes_since_last:.0f} min (espera {espaco} min)")
+    return PostDecision(True, f"hype {ratio:.1f}x")
 
 
 class YouTube:
@@ -100,8 +129,7 @@ class YouTube:
         self._access_token: str | None = None
         self._token_exp = 0.0
         self._uploads_playlist: str | None = None
-        self._today_count: dict[str, int] = {}
-        self._count_day: str | None = None
+        self._post_times: dict[str, list[float]] = {}   # marca -> epochs dos posts das últimas ~24h
         self._lock = threading.Lock()
 
     @classmethod
@@ -151,34 +179,65 @@ class YouTube:
             pass
         return dt.strftime("%Y-%m-%d")
 
-    def posted_today(self, platform: str, name: str) -> int:
-        """Quantos Shorts deste canal monitorado já foram postados hoje (consulta o YouTube 1x por job)."""
-        with self._lock:
-            hoje = self._today()
-            if self._count_day != hoje:
-                self._today_count, self._count_day = {}, hoje
-            chave = marker(platform, name)
-            if chave in self._today_count:
-                return self._today_count[chave]
-            if not self._uploads_playlist:
-                d = self._get("channels", {"part": "contentDetails", "mine": "true"})
-                if not d.get("items"):
-                    raise YouTubeError("a conta autorizada não tem canal no YouTube")
-                self._uploads_playlist = d["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
-            d = self._get("playlistItems", {"part": "snippet", "playlistId": self._uploads_playlist,
-                                            "maxResults": 50})
-            n = 0
+    def _fetch_post_times(self, chave: str) -> list[float]:
+        """Horários (epoch) dos uploads deste canal monitorado nas últimas 24h (até 4 páginas)."""
+        if not self._uploads_playlist:
+            d = self._get("channels", {"part": "contentDetails", "mine": "true"})
+            if not d.get("items"):
+                raise YouTubeError("a conta autorizada não tem canal no YouTube")
+            self._uploads_playlist = d["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+        limite = time.time() - 24 * 3600
+        tempos: list[float] = []
+        token = None
+        for _ in range(4):
+            params = {"part": "snippet", "playlistId": self._uploads_playlist, "maxResults": 50}
+            if token:
+                params["pageToken"] = token
+            d = self._get("playlistItems", params)
+            antigos = 0
             for it in d.get("items", []):
                 sn = it.get("snippet", {})
-                if chave in (sn.get("description") or "") and self._to_local_day(sn.get("publishedAt", "")) == hoje:
-                    n += 1
-            self._today_count[chave] = n
-            return n
+                try:
+                    t = datetime.fromisoformat(sn.get("publishedAt", "").replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    continue
+                if t < limite:
+                    antigos += 1
+                elif chave in (sn.get("description") or ""):
+                    tempos.append(t)
+            token = d.get("nextPageToken")
+            if not token or antigos:
+                break
+        return sorted(tempos)
+
+    def stats(self, platform: str, name: str, now: float | None = None) -> PostStats:
+        """Posts de hoje / da última hora / minutos desde o último (consulta o YouTube 1x por job)."""
+        now = time.time() if now is None else now
+        with self._lock:
+            chave = marker(platform, name)
+            if chave not in self._post_times:
+                self._post_times[chave] = self._fetch_post_times(chave)
+            tempos = self._post_times[chave]
+            hoje = self._today()
+            return PostStats(
+                today=sum(1 for t in tempos if self._epoch_to_local_day(t) == hoje),
+                last_hour=sum(1 for t in tempos if now - t < 3600),
+                minutes_since_last=(now - max(tempos)) / 60 if tempos else None,
+            )
+
+    def posted_today(self, platform: str, name: str) -> int:
+        return self.stats(platform, name).today
+
+    def _epoch_to_local_day(self, t: float) -> str:
+        try:
+            from zoneinfo import ZoneInfo
+            return datetime.fromtimestamp(t, ZoneInfo(self.timezone)).strftime("%Y-%m-%d")
+        except Exception:  # noqa: BLE001
+            return datetime.fromtimestamp(t).strftime("%Y-%m-%d")
 
     def _increment(self, platform: str, name: str) -> None:
         with self._lock:
-            chave = marker(platform, name)
-            self._today_count[chave] = self._today_count.get(chave, 0) + 1
+            self._post_times.setdefault(marker(platform, name), []).append(time.time())
 
     # ---------------------------------------------------------------- upload
     def upload(self, path: Path | str, metadata: dict, platform: str, name: str) -> str:
