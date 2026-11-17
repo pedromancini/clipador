@@ -99,6 +99,14 @@ jobs:
           key: whisper-${{ hashFiles('channels.json') }}
           restore-keys: whisper-
 
+      - name: Moldura da cam salva (das execuções anteriores)
+        if: steps.live.outputs.live == 'true'
+        uses: actions/cache@v6
+        with:
+          path: state
+          key: facecam-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}
+          restore-keys: facecam-${{ matrix.platform }}-${{ matrix.name }}-
+
       - id: run
         name: Clipar a live
         if: steps.live.outputs.live == 'true'

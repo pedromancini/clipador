@@ -15,6 +15,7 @@ import os
 import shutil
 import signal
 import threading
+import json
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -24,7 +25,7 @@ from pathlib import Path
 from . import summary
 from .chat import make_chat_reader
 from .clipper import build_clip
-from .config import DEFAULT_YOUTUBE, Channel, Config
+from .config import DEFAULT_YOUTUBE, ROOT, Channel, Config, Facecam
 from .detector import HypeDetector, Peak
 from .recorder import Recorder, select_segments
 from .stream import StreamInfo, get_stream_info, make_session
@@ -68,7 +69,30 @@ class ChannelRunner:
         self._clip_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clip")
         self._futures: list[Future] = []
         self._clip_lock = threading.Lock()
-        self._facecam_last_good = None  # última moldura da cam achada pelas bordas nesta live
+        # última moldura da cam achada pelas bordas (fica salva entre execuções; no Actions via cache)
+        self._facecam_file = Path(os.environ.get("CLIPADOR_STATE_DIR") or ROOT / "state") / f"facecam-{channel.slug}.json"
+        self._facecam_last_good = self._load_facecam() if channel.facecam_auto else None
+
+    # ------------------------------------------------------------------ facecam salva
+    def _load_facecam(self) -> Facecam | None:
+        try:
+            d = json.loads(self._facecam_file.read_text(encoding="utf-8"))
+            fc = Facecam(**{k: float(d[k]) for k in ("x", "y", "w", "h")})
+            fc.validate("state")
+            log.info("[%s] moldura da cam salva carregada: %s", self.ch.slug, fc)
+            return fc
+        except FileNotFoundError:
+            return None
+        except Exception as e:  # noqa: BLE001
+            log.warning("[%s] moldura salva inválida (%s); ignorando", self.ch.slug, e)
+            return None
+
+    def _save_facecam(self, fc: Facecam) -> None:
+        try:
+            self._facecam_file.parent.mkdir(parents=True, exist_ok=True)
+            self._facecam_file.write_text(json.dumps({"x": fc.x, "y": fc.y, "w": fc.w, "h": fc.h}), encoding="utf-8")
+        except OSError as e:
+            log.warning("[%s] não consegui salvar a moldura da cam: %s", self.ch.slug, e)
 
     # ------------------------------------------------------------------ stream
     def _open_stream(self):
@@ -125,6 +149,7 @@ class ChannelRunner:
                              sub_position=self.s["subtitle_position"])
             if res.facecam_refined is not None:
                 self._facecam_last_good = res.facecam_refined
+                self._save_facecam(res.facecam_refined)
             info = self.info or StreamInfo(live=True)
             yt_line = self._maybe_post_youtube(res, peak, info)
             # resumo na página do job (não depende do Telegram)

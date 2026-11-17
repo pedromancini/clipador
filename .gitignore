@@ -9,3 +9,4 @@ work/
 *.wav
 .env
 client_secret*.json
+state/
