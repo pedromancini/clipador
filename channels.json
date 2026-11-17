@@ -25,7 +25,7 @@
     "hashtags": ["#gta6", "#gta", "#clips", "#cortes", "#fyp", "#viral"],
 
     "max_runtime_minutes": 340,
-    "max_clips_per_run": 40,
+    "max_clips_per_run": 120,
 
     "youtube": {
       "enabled": true,

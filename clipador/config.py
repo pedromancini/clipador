@@ -48,7 +48,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "hashtags": ["#clips", "#cortes", "#fyp"],
     # Execução
     "max_runtime_minutes": 340,
-    "max_clips_per_run": 40,
+    "max_clips_per_run": 120,
 }
 
 # Postagem automática no YouTube Shorts (o TikTok fica semiautomático: o clip chega no Telegram)

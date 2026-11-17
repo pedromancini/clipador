@@ -68,6 +68,7 @@ class ChannelRunner:
         self._clip_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clip")
         self._futures: list[Future] = []
         self._clip_lock = threading.Lock()
+        self._facecam_last_good = None  # última moldura da cam achada pelas bordas nesta live
 
     # ------------------------------------------------------------------ stream
     def _open_stream(self):
@@ -119,8 +120,11 @@ class ChannelRunner:
             res = build_clip(segs, t0, t1 - t0, out, workdir, layout=self.ch.layout, facecam=self.ch.facecam,
                              fps=int(self.s["fps"]), with_subtitles=True,
                              whisper_model=self.s["whisper_model"], language=self.s["language"],
-                             facecam_auto=self.ch.facecam_auto, sub_size=int(self.s["subtitle_size"]),
+                             facecam_auto=self.ch.facecam_auto, facecam_last_good=self._facecam_last_good,
+                             sub_size=int(self.s["subtitle_size"]),
                              sub_position=self.s["subtitle_position"])
+            if res.facecam_refined is not None:
+                self._facecam_last_good = res.facecam_refined
             info = self.info or StreamInfo(live=True)
             yt_line = self._maybe_post_youtube(res, peak, info)
             # resumo na página do job (não depende do Telegram)

@@ -37,6 +37,7 @@ class ClipResult:
     transcript: str = ""
     words: list = field(default_factory=list)
     encode_seconds: float = 0.0
+    facecam_refined: Facecam | None = None  # moldura achada pelas bordas (o runner guarda p/ os próximos)
 
 
 def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 900) -> subprocess.CompletedProcess:
@@ -121,6 +122,7 @@ def build_clip(
     whisper_model: str = "base",
     language: str = "pt",
     facecam_auto: bool = False,
+    facecam_last_good: Facecam | None = None,
     sub_size: int = 80,
     sub_position: str = "middle",
 ) -> ClipResult:
@@ -142,11 +144,14 @@ def build_clip(
         raise ValueError(f"trecho gravado curto demais ({duration:.1f}s)")
 
     # ---- facecam automática ----
+    refinada: Facecam | None = None
     if layout == "facecam" and facecam_auto:
         from .facecam import detect_facecam
-        achada = detect_facecam(src, offset, duration)
+        achada = detect_facecam(src, offset, duration, last_good=facecam_last_good)
         if achada:
-            facecam = achada
+            facecam = achada.cam
+            if achada.refined:
+                refinada = achada.cam
         else:
             layout = "blur"  # sem rosto estável (ex.: tela de loading, streamer saiu): blur não erra
 
@@ -209,7 +214,7 @@ def build_clip(
     real = media_duration(out_path) or duration
     res = ClipResult(path=out_path, duration=real, size=size, subtitled=ass_ok,
                      transcript=subs.transcript_text(words), words=words,
-                     encode_seconds=time.monotonic() - inicio)
+                     encode_seconds=time.monotonic() - inicio, facecam_refined=refinada)
     log.info("clip pronto: %s (%.1fs, %.1f MB, legenda=%s, %.0fs de processamento)",
              out_path.name, res.duration, size / 1e6, ass_ok, res.encode_seconds)
     return res

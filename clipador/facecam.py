@@ -25,7 +25,7 @@ log = logging.getLogger("clipador.facecam")
 
 SAMPLE_W, SAMPLE_H = 960, 540
 CAM_ASPECT = 1080 / 640          # proporção da área da câmera no layout facecam
-FACE_TO_CAM_WIDTH = 4.0          # largura da cam ≈ 4x a largura do rosto
+FACE_TO_CAM_WIDTH = 3.2          # largura da cam ≈ 3,2x a largura do rosto (medido em lives reais)
 
 
 @dataclass
@@ -215,8 +215,23 @@ def refine_with_edges(image_paths: list[Path], face: FaceBox) -> Facecam | None:
                    w=round(max(0.01, w - 2 * mx), 4), h=round(max(0.01, h - 2 * my), 4))
 
 
-def detect_facecam(src: Path, offset: float, duration: float, n_frames: int = 6) -> Facecam | None:
-    """Acha a facecam no trecho do clip. None se não houver rosto estável."""
+@dataclass
+class FacecamResult:
+    cam: Facecam
+    refined: bool   # True = moldura da cam achada pelas bordas (confiável); False = estimada/reaproveitada
+
+
+def _contains(cam: Facecam, face: FaceBox) -> bool:
+    return cam.x <= face.cx <= cam.x + cam.w and cam.y <= face.cy <= cam.y + cam.h         and face.w < cam.w * 0.6
+
+
+def detect_facecam(src: Path, offset: float, duration: float, n_frames: int = 6,
+                   last_good: Facecam | None = None) -> FacecamResult | None:
+    """Acha a facecam no trecho do clip. None se não houver rosto estável.
+
+    last_good: última moldura achada pelas bordas nesta live. Se agora a borda não for achada mas o
+    rosto continuar dentro dela, reaproveita (a cam do streamer raramente muda no meio do jogo).
+    """
     try:
         with tempfile.TemporaryDirectory(prefix="facecam_") as d:
             frames = _sample_frames(src, offset, duration, n_frames, Path(d))
@@ -230,9 +245,13 @@ def detect_facecam(src: Path, offset: float, duration: float, n_frames: int = 6)
     if face is None:
         log.info("facecam auto: nenhum rosto estável encontrado; usando layout blur")
         return None
-    cam = refinada or cam_from_face(face)
+    if refinada:
+        cam, origem = refinada, "borda da cam"
+    elif last_good is not None and _contains(last_good, face):
+        cam, origem = last_good, "reaproveitada da última moldura"
+    else:
+        cam, origem = cam_from_face(face), "estimada pelo rosto"
     cam = Facecam(x=float(cam.x), y=float(cam.y), w=float(cam.w), h=float(cam.h))
-    log.info("facecam auto (%s):", "borda da cam" if refinada else "estimada pelo rosto")
-    log.info("facecam auto: rosto em x=%.2f y=%.2f (w=%.2f) -> cam x=%.3f y=%.3f w=%.3f h=%.3f",
-             face.cx, face.cy, face.w, cam.x, cam.y, cam.w, cam.h)
-    return cam
+    log.info("facecam auto (%s): rosto em x=%.2f y=%.2f (w=%.2f) -> cam x=%.3f y=%.3f w=%.3f h=%.3f",
+             origem, face.cx, face.cy, face.w, cam.x, cam.y, cam.w, cam.h)
+    return FacecamResult(cam=cam, refined=bool(refinada))

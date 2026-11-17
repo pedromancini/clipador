@@ -36,5 +36,16 @@ class TestFacecam(unittest.TestCase):
             self.assertGreaterEqual(c.x + c.w, face.cx)
 
 
+
+class TestReaproveitar(unittest.TestCase):
+    def test_contains(self):
+        from clipador.config import Facecam
+        from clipador.facecam import _contains
+        cam = Facecam(0.0, 0.0, 0.22, 0.24)
+        self.assertTrue(_contains(cam, FaceBox(0.10, 0.08, 0.07, 0.12)))     # rosto dentro da cam
+        self.assertFalse(_contains(cam, FaceBox(0.60, 0.50, 0.07, 0.12)))    # cam mudou de lugar
+        self.assertFalse(_contains(cam, FaceBox(0.02, 0.02, 0.18, 0.2)))     # rosto enorme (tela cheia)
+
+
 if __name__ == "__main__":
     unittest.main()
