@@ -222,6 +222,25 @@ Quer que um canal nunca vá pro YouTube (só Telegram)? Coloque `"youtube": fals
 
 Os clips que não passam no filtro continuam chegando no Telegram, com o motivo (ex.: `⏭️ YouTube: hype 3.2x < 4x`).
 
+### 8. Baixar os clips no PC, prontos pra postar no TikTok
+
+Dê dois cliques em **`baixar_clips_tiktok.bat`** (ou rode `python -m clipador.tiktok_baixar`). Ele baixa do
+GitHub os clips que ainda não estão no seu PC e organiza em `Vídeos\Clips TikTok`, uma pasta por dia de postagem:
+
+```
+Clips TikTok\
+  2026-11-19 (quinta)\
+    19h30 - GTA 6 alanzoka foi preso.mp4
+    19h30 - GTA 6 alanzoka foi preso.txt    <- horário pra postar + legenda pronta pra copiar
+    extras\                                  <- os que sobraram, se quiser postar mais
+```
+
+- Os clips com o chat mais agitado ficam com os horários mais cedo. Os outros vão para `extras`.
+- Os horários ficam em `settings.tiktok.horarios` no `channels.json` (padrão: 12h, 15h, 18h, 19h30, 21h, 22h30).
+- Ele lembra o que já baixou e quais horários já estão ocupados, então pode rodar quantas vezes quiser.
+- Os clips só aparecem quando a execução no GitHub termina, e ficam lá por 3 dias.
+- Precisa do [GitHub CLI](https://cli.github.com) logado (`gh auth login`). Outra pasta: `--pasta "D:\Clips"`.
+
 ---
 
 ## Testar no seu PC (opcional)

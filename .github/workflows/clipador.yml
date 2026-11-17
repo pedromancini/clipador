@@ -125,7 +125,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: clips-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}
-          path: clips/*.mp4
+          path: |
+            clips/*.mp4
+            clips/*.json
           retention-days: 3
           if-no-files-found: ignore
 

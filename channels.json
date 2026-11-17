@@ -27,6 +27,10 @@
     "max_runtime_minutes": 340,
     "max_clips_per_run": 120,
 
+    "tiktok": {
+      "horarios": ["12:00", "15:00", "18:00", "19:30", "21:00", "22:30"]
+    },
+
     "youtube": {
       "enabled": true,
       "privacy": "public",

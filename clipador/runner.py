@@ -160,6 +160,7 @@ class ChannelRunner:
                                    f"{titulo} {tags}", res.transcript)
             except OSError as e:
                 log.warning("não consegui escrever o resumo: %s", e)
+            self._write_sidecar(out, peak, res, info, titulo, yt_line)
             cap = build_caption(self.ch.name, self.ch.platform_label, peak, res.transcript, info.title,
                                 info.category, self.s["hashtags"], self.s["timezone"], youtube_line=yt_line)
             self.tg.send_video(res.path, cap, duration=res.duration)
@@ -172,6 +173,32 @@ class ChannelRunner:
         finally:
             rec.release(token)
             shutil.rmtree(workdir, ignore_errors=True)
+
+    def _write_sidecar(self, out: Path, peak: Peak, res, info: StreamInfo, titulo: str,
+                       yt_line: str | None) -> None:
+        """<clip>.json ao lado do vídeo: dados que o baixador do TikTok usa (legenda, horário, hype)."""
+        yt_url = None
+        if yt_line and "youtube.com/" in yt_line:
+            yt_url = "https://" + yt_line.split("https://", 1)[1].strip()
+        dados = {
+            "arquivo": out.name,
+            "canal": self.ch.name,
+            "plataforma": self.ch.platform_label,
+            "url_canal": self.ch.url,
+            "pico_epoch": peak.t,
+            "hype": None if peak.ratio == float("inf") else round(peak.ratio, 1),
+            "titulo": titulo,
+            "hashtags": build_hashtags(self.s["hashtags"], self.ch.name, info.category),
+            "categoria": info.category,
+            "titulo_live": info.title,
+            "fala": res.transcript[:500],
+            "duracao": round(res.duration, 1),
+            "youtube": yt_url,
+        }
+        try:
+            out.with_suffix(".json").write_text(json.dumps(dados, ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError as e:
+            log.warning("não consegui salvar os dados do clip: %s", e)
 
     def _maybe_post_youtube(self, res, peak: Peak, info: StreamInfo) -> str | None:
         """Posta no YouTube Shorts se passar no filtro. Devolve a linha que vai na mensagem do Telegram."""
