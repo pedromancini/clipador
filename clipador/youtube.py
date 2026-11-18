@@ -58,10 +58,12 @@ def marker(platform: str, name: str) -> str:
 
 def build_metadata(title: str, channel_name: str, platform_label: str, channel_url: str,
                    hashtags: list[str], platform: str, category_id: str, privacy: str,
-                   made_for_kids: bool, hook: str | None = None) -> dict:
-    """Título (máx. 100 caracteres, com #Shorts), descrição com crédito ao streamer e tags."""
+                   made_for_kids: bool, hook: str | None = None, short: bool = True) -> dict:
+    """Título (máx. 100 caracteres, com #Shorts), descrição com crédito ao streamer e tags.
+
+    short=False: vídeo normal (versão horizontal), sem o #Shorts."""
     titulo = re.sub(r"[<>]", "", title).strip()
-    sufixo = " #Shorts"
+    sufixo = " #Shorts" if short else ""
     if len(titulo) + len(sufixo) > 100:
         titulo = titulo[: 100 - len(sufixo) - 1].rstrip() + "…"
     titulo += sufixo
@@ -70,10 +72,10 @@ def build_metadata(title: str, channel_name: str, platform_label: str, channel_u
         (f"{hook.strip()}\n\n" if hook and hook.strip() else "") +
         f"Clip da live de {channel_name} na {platform_label}.\n"
         f"Assista ao vivo: {channel_url}\n\n"
-        f"{tags_txt} #shorts\n\n"
+        f"{tags_txt}{' #shorts' if short else ''}\n\n"
         f"{marker(platform, channel_name)}"
     )
-    tags = [h.lstrip("#") for h in hashtags][:15] + ["shorts", channel_name]
+    tags = [h.lstrip("#") for h in hashtags][:15] + (["shorts"] if short else []) + [channel_name]
     return {
         "snippet": {"title": titulo, "description": descricao[:4900], "tags": tags,
                     "categoryId": str(category_id), "defaultLanguage": "pt-BR", "defaultAudioLanguage": "pt-BR"},
@@ -133,6 +135,47 @@ def decide(yt_settings: dict, channel_allows: bool, ratio: float, forced: bool, 
     return PostDecision(True, f"hype {ratio:.1f}x")
 
 
+@dataclass
+class ContaStats:
+    """Envios do CANAL do YouTube inteiro (todos os streamers + manuais) nas últimas 24h."""
+    ult24h: int = 0
+    ult_hora: int = 0
+    min_desde_ultimo: float | None = None
+    horizontais: int = 0
+
+
+def conta_teto(yt_settings: dict, conta: str) -> int:
+    tetos = yt_settings.get("max_uploads_24h") or {}
+    if isinstance(tetos, int):
+        return tetos
+    return int(tetos.get(conta or "principal") or tetos.get("principal") or 11)
+
+
+def viral_minimo(yt_settings: dict, usados: int, teto: int) -> float:
+    """Nota mínima pra pegar uma vaga: sobe conforme o canal enche."""
+    faixas = yt_settings.get("viral_minimo") or [6.5, 7.5, 8.5]
+    uso = usados / max(1, teto)
+    return float(faixas[0] if uso < 0.4 else faixas[1] if uso < 0.75 else faixas[2])
+
+
+def decide_conta(yt_settings: dict, conta: str, cs: ContaStats, viral: float | None, fonte: str,
+                 extremo: bool = False) -> PostDecision:
+    """Filtro do canal do YouTube inteiro: vaga nas 24h, qualidade do título e nota de viral."""
+    teto = conta_teto(yt_settings, conta)
+    if cs.ult24h >= teto:
+        return PostDecision(False, f"canal do YouTube cheio ({cs.ult24h}/{teto} envios nas últimas 24h)")
+    if fonte != "gemini" or viral is None:
+        return PostDecision(False, "título reserva (sem IA): não posto pra não repetir título genérico")
+    minimo = viral_minimo(yt_settings, cs.ult24h, teto) - (1.0 if extremo else 0.0)
+    if viral < minimo:
+        return PostDecision(False, f"nota {viral:g} < {minimo:g} (canal com {cs.ult24h}/{teto} em 24h: "
+                                   "vaga guardada pros melhores momentos)")
+    espaco = float(yt_settings.get("account_min_minutes_between_posts", 20))
+    if not extremo and cs.min_desde_ultimo is not None and cs.min_desde_ultimo < espaco:
+        return PostDecision(False, f"o canal postou há {cs.min_desde_ultimo:.0f} min (espaço: {espaco:g} min)")
+    return PostDecision(True, f"nota {viral:g}, vaga {cs.ult24h + 1}/{teto}")
+
+
 class YouTube:
     def __init__(self, client_id: str | None, client_secret: str | None, refresh_token: str | None,
                  timezone: str = "America/Sao_Paulo"):
@@ -146,6 +189,7 @@ class YouTube:
         self._token_exp = 0.0
         self._uploads_playlist: str | None = None
         self._post_times: dict[str, list[float]] = {}   # marca -> epochs dos posts das últimas ~24h
+        self._conta_cache: tuple[float, list[tuple[float, str]]] | None = None   # (lido em, [(epoch, descrição)])
         self._lock = threading.Lock()
 
     @classmethod
@@ -203,13 +247,29 @@ class YouTube:
 
     def _fetch_post_times(self, chave: str) -> list[float]:
         """Horários (epoch) dos uploads deste canal monitorado nas últimas 24h (até 4 páginas)."""
+        return sorted(t for t, d in self._recent_uploads() if chave in d)
+
+    def conta_stats(self, now: float | None = None, max_age: float = 300) -> ContaStats:
+        """Envios do canal do YouTube inteiro nas últimas 24h (relido a cada 5 min: outros jobs postam)."""
+        now = time.time() if now is None else now
+        with self._lock:
+            if self._conta_cache is None or now - self._conta_cache[0] > max_age:
+                self._conta_cache = (now, self._recent_uploads())
+            ups = [(t, d) for t, d in self._conta_cache[1] if now - t < 24 * 3600]
+        tempos = [t for t, _ in ups]
+        return ContaStats(ult24h=len(ups), ult_hora=sum(1 for t in tempos if now - t < 3600),
+                          min_desde_ultimo=(now - max(tempos)) / 60 if tempos else None,
+                          horizontais=sum(1 for _, d in ups if "clipador:horizontal/" in d))
+
+    def _recent_uploads(self) -> list[tuple[float, str]]:
+        """(epoch, descrição) de todos os uploads do canal nas últimas 24h (até 4 páginas)."""
         if not self._uploads_playlist:
             d = self._get("channels", {"part": "contentDetails", "mine": "true"})
             if not d.get("items"):
                 raise YouTubeError("a conta autorizada não tem canal no YouTube")
             self._uploads_playlist = d["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
         limite = time.time() - 24 * 3600
-        tempos: list[float] = []
+        tempos: list[tuple[float, str]] = []
         token = None
         for _ in range(4):
             params = {"part": "snippet", "playlistId": self._uploads_playlist, "maxResults": 50}
@@ -225,8 +285,8 @@ class YouTube:
                     continue
                 if t < limite:
                     antigos += 1
-                elif chave in (sn.get("description") or ""):
-                    tempos.append(t)
+                else:
+                    tempos.append((t, sn.get("description") or ""))
             token = d.get("nextPageToken")
             if not token or antigos:
                 break
@@ -312,7 +372,11 @@ class YouTube:
                 if r.status_code in (200, 201):
                     vid = r.json()["id"]
                     self._increment(platform, name)
-                    url = f"https://youtube.com/shorts/{vid}"
+                    with self._lock:
+                        if self._conta_cache is not None:
+                            self._conta_cache[1].append((time.time(), metadata["snippet"].get("description", "")))
+                    short = "#Shorts" in metadata["snippet"].get("title", "")
+                    url = f"https://youtube.com/shorts/{vid}" if short else f"https://youtu.be/{vid}"
                     status = r.json().get("status", {})
                     if status.get("privacyStatus") != metadata["status"]["privacyStatus"]:
                         log.warning("YouTube deixou o vídeo como %s (pedido: %s)", status.get("privacyStatus"),

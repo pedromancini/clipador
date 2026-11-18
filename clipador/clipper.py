@@ -99,6 +99,33 @@ def watermark_filter(workdir: Path, texto: str, entrada: str, saida: str) -> str
             f"x=w-text_w-44:y=168{saida}")  # canto direito, abaixo da barra de busca do Shorts
 
 
+def build_horizontal(segments: list[tuple[float, Path]], t0: float, duration: float, out_path: Path,
+                     workdir: Path, fps: int = 30, watermark: str | None = None) -> Path:
+    """Versão 16:9 (1920x1080) do momento, com a tela da live inteira, pra postar como vídeo normal."""
+    if not segments:
+        raise ValueError("nenhum segmento para a versão horizontal")
+    workdir.mkdir(parents=True, exist_ok=True)
+    src = workdir / "source_h.ts"
+    concat_segments([p for _, p in segments], src)
+    total = media_duration(src)
+    offset = max(0.0, t0 - segments[0][0])
+    if total > 0:
+        offset = min(offset, max(0.0, total - 3))
+        duration = min(duration, total - offset)
+    base = (f"[0:v]fps={fps},scale=1920:1080:force_original_aspect_ratio=decrease,"
+            f"pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v]")
+    if watermark:
+        base = base[: base.rindex("[v]")] + "[v0];" + watermark_filter(workdir, watermark, "[v0]", "[v]")
+    tmp = workdir / "clip_h.mp4"
+    _encode(src, tmp, workdir, offset, duration, base + ";[v]null[vout]", fps,
+            ["-crf", "21", "-maxrate", "10M", "-bufsize", "20M"])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(tmp), out_path)
+    src.unlink(missing_ok=True)
+    log.info("versão horizontal pronta: %s (%.0fs)", out_path.name, duration)
+    return out_path
+
+
 def concat_segments(paths: list[Path], out: Path) -> None:
     """MPEG-TS pode ser concatenado byte a byte (os segmentos vêm do mesmo ffmpeg)."""
     with open(out, "wb") as dst:

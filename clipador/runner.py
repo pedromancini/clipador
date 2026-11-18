@@ -16,6 +16,7 @@ import shutil
 import signal
 import threading
 import json
+import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -25,16 +26,21 @@ from pathlib import Path
 
 from . import summary
 from .chat import make_chat_reader
-from .clipper import build_clip
-from .copywriter import ClipCopy, Copywriter
+from .clipper import build_clip, build_horizontal
+from .copywriter import _GTA6_RE, ClipCopy, Copywriter
 from .config import DEFAULT_YOUTUBE, ROOT, Channel, Config, Facecam
 from .detector import HypeDetector, Peak
 from .recorder import Recorder, select_segments
 from .stream import StreamInfo, get_stream_info, make_session
 from .telegram import Telegram, build_caption
-from .youtube import YouTube, YouTubeLimitError, build_metadata, decide
+from .youtube import YouTube, YouTubeLimitError, build_metadata, conta_teto, decide, decide_conta, marker
 
 log = logging.getLogger("clipador.runner")
+
+
+def _norm_titulo(t: str) -> str:
+    t = re.sub(r"#\w+", " ", (t or "").lower())
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", t)).strip()
 
 
 @dataclass
@@ -61,6 +67,8 @@ class ChannelRunner:
         self.yt = youtube or YouTube.from_env(self.s["timezone"], channel.youtube_conta)
         self.hashtags = channel.hashtags or self.s["hashtags"]
         self._yt_pausa_ate = 0.0   # limite de envios do canal: não tenta de novo antes disso
+        self._titulos: list[str] = []       # títulos já usados no canal (a IA não repete)
+        self._titulos_lidos = False
         self.copy = Copywriter()        # título/legenda com IA (GEMINI_API_KEY) ou plano B local
         self.post_forced = post_forced   # --post-youtube: posta até o clip de teste (--once)
 
@@ -119,13 +127,29 @@ class ChannelRunner:
         t0 = peak.t - before
         return t0, t0 + dur
 
+    def _extra_antes_h(self) -> float:
+        """Segundos a mais de contexto antes do clip, pra versão horizontal (0 se desligada)."""
+        h = (self.yt_settings or {}).get("horizontal") or {}
+        return float(h.get("extra_before_seconds", 20)) if h.get("enabled") and self.ch.horizontal else 0.0
+
+    def _titulos_evitar(self) -> list[str]:
+        """Últimos títulos do canal do YouTube (1x por job) + os desta execução: a IA não repete."""
+        if not self._titulos_lidos:
+            self._titulos_lidos = True
+            if self.yt.configured:
+                try:
+                    self._titulos = sorted(self.yt.titulos_postados(paginas=1))[:30] + self._titulos
+                except Exception as e:  # noqa: BLE001
+                    log.warning("não consegui ler os títulos do canal: %s", e)
+        return self._titulos[-25:]
+
     def submit_clip(self, peak: Peak) -> None:
         if self.clips_started >= self.s["max_clips_per_run"]:
             log.warning("limite de %d clips nesta execução atingido; ignorando pico", self.s["max_clips_per_run"])
             return
         self.clips_started += 1
         t0, t1 = self._clip_window(peak)
-        token = self.recorder.protect(t0, t1)  # protege já, antes de entrar na fila
+        token = self.recorder.protect(t0 - self._extra_antes_h(), t1)  # protege já, antes de entrar na fila
         log.info("🔥 PICO #%d: score %.1f (baseline %.1f, limiar %.1f) top=%s", self.clips_started, peak.score,
                  peak.baseline, peak.threshold, peak.top_messages[:3])
         self._futures.append(self._clip_pool.submit(self._make_clip, peak, token, self.clips_started))
@@ -158,12 +182,22 @@ class ChannelRunner:
                 self._save_facecam(res.facecam_refined)
             info = self.info or StreamInfo(live=True)
             # título + legenda + hashtags (IA ouvindo o áudio do clip, ou plano B local)
+            evitar = self._titulos_evitar()
             texto = self.copy.make(self.ch.name, res.words, res.transcript, workdir / "audio.wav",
                                    max(0.0, peak.t - t0), peak.top_messages, info.category, info.title,
-                                   self.hashtags)
+                                   self.hashtags, evitar=evitar)
+            repetido = _norm_titulo(texto.titulo) in {_norm_titulo(t) for t in evitar}
+            self._titulos.append(texto.titulo)
             texto.titulo = self.ch.titulo_com_tags(texto.titulo)
             texto.hashtags = self.ch.limpar_hashtags(texto.hashtags)
-            yt_line = self._maybe_post_youtube(res, peak, info, texto)
+            th0 = t0 - self._extra_antes_h()
+
+            def render_h(th0=th0, t1=t1):
+                segs_h = select_segments(rec.segments(), th0, t1)
+                return build_horizontal(segs_h, th0, t1 - th0, out.with_name(out.stem + "_horizontal.mp4"),
+                                        workdir / "h", fps=int(self.s["fps"]), watermark=self.ch.watermark)
+
+            yt_line = self._maybe_post_youtube(res, peak, info, texto, repetido=repetido, render_h=render_h)
             # resumo na página do job (não depende do Telegram)
             try:
                 summary.write_clip(self.out_dir, out.name, peak, self.s["timezone"], yt_line,
@@ -214,7 +248,8 @@ class ChannelRunner:
         except OSError as e:
             log.warning("não consegui salvar os dados do clip: %s", e)
 
-    def _maybe_post_youtube(self, res, peak: Peak, info: StreamInfo, texto: ClipCopy) -> str | None:
+    def _maybe_post_youtube(self, res, peak: Peak, info: StreamInfo, texto: ClipCopy, repetido: bool = False,
+                            render_h=None) -> str | None:
         """Posta no YouTube Shorts se passar no filtro. Devolve a linha que vai na mensagem do Telegram."""
         ys = self.yt_settings
         if not ys.get("enabled"):
@@ -230,12 +265,27 @@ class ChannelRunner:
             if not d.post:
                 log.info("YouTube: não postado (%s)", d.reason)
                 return f"⏭️ YouTube: {d.reason}"
+            if not peak.forced:
+                if self.ch.so_gta and not (texto.sobre_gta6 or _GTA6_RE.search(info.category or "")):
+                    return "⏭️ YouTube: esse streamer só vai pro canal quando o clip é de GTA"
+                if repetido:
+                    return "⏭️ YouTube: a IA repetiu um título que já está no canal"
+                cs = self.yt.conta_stats()
+                dc = decide_conta(ys, self.ch.youtube_conta, cs, texto.viral, texto.fonte, extremo=d.extreme)
+                if not dc.post:
+                    log.info("YouTube: não postado (%s)", dc.reason)
+                    return f"⏭️ YouTube: {dc.reason}"
             meta = build_metadata(texto.titulo, self.ch.name, self.ch.platform_label, self.ch.url, texto.hashtags,
                                   self.ch.platform, ys["category_id"], ys["privacy"], ys["made_for_kids"],
                                   hook=texto.legenda if texto.legenda != texto.titulo else None)
             url = self.yt.upload(res.path, meta, self.ch.platform, self.ch.name)
             extra = " 🔥 post extra" if d.extreme else ""
-            return f"▶️ Postado no YouTube ({st.today + 1}º hoje, {d.reason}){extra}: {url}"
+            linha = f"▶️ Postado no YouTube ({st.today + 1}º hoje, {d.reason}){extra}: {url}"
+            if not peak.forced:
+                h = self._maybe_post_horizontal(texto, render_h)
+                if h:
+                    linha += f"\n🖥️ Versão horizontal: {h}"
+            return linha
         except YouTubeLimitError as e:
             self._yt_pausa_ate = time.time() + 2 * 3600
             log.warning("YouTube: %s; pausando os posts por 2h", e)
@@ -245,6 +295,35 @@ class ChannelRunner:
             log.exception("YouTube falhou")
             self.tg.send_error(f"{self.ch.slug}: postagem no YouTube falhou: {e}", min_interval=1800)
             return f"⚠️ YouTube falhou: {str(e)[:150]}"
+
+    def _maybe_post_horizontal(self, texto: ClipCopy, render_h) -> str | None:
+        """Momento muito forte: posta também a versão 16:9 (vídeo normal), poucas por dia."""
+        ys = self.yt_settings
+        hs = ys.get("horizontal") or {}
+        if not (hs.get("enabled") and self.ch.horizontal and render_h):
+            return None
+        if (texto.viral or 0) < float(hs.get("min_viral", 8.0)):
+            return None
+        cs = self.yt.conta_stats()
+        if cs.horizontais >= int(hs.get("max_24h", 3)) or cs.ult24h >= conta_teto(ys, self.ch.youtube_conta) - 1:
+            return None
+        try:
+            video = render_h()
+            titulo = re.sub(r"#\S+", "", texto.titulo_longo or texto.titulo).strip(" -|")
+            serie = f" | {self.ch.name} GTA 6" if texto.sobre_gta6 else f" | {self.ch.name}"
+            titulo = self.ch.titulo_com_tags(titulo[: 100 - len(serie)].rstrip() + serie, limite=100)
+            meta = build_metadata(titulo, self.ch.name, self.ch.platform_label, self.ch.url, texto.hashtags,
+                                  self.ch.platform, ys["category_id"], ys["privacy"], ys["made_for_kids"],
+                                  hook=texto.legenda if texto.legenda != texto.titulo else None, short=False)
+            meta["snippet"]["description"] = meta["snippet"]["description"].replace(
+                marker(self.ch.platform, self.ch.name), f"clipador:horizontal/{self.ch.name}")
+            return self.yt.upload(video, meta, "horizontal", self.ch.name)
+        except YouTubeLimitError as e:
+            self._yt_pausa_ate = time.time() + 2 * 3600
+            log.warning("YouTube (horizontal): %s; pausando por 2h", e)
+        except Exception as e:  # noqa: BLE001
+            log.warning("versão horizontal falhou: %s", e)
+        return None
 
     # ------------------------------------------------------------------ principal
     def request_stop(self) -> None:

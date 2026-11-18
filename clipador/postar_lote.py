@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from .config import load_config
-from .youtube import YouTube, YouTubeLimitError, build_metadata, marker
+from .youtube import YouTube, YouTubeLimitError, build_metadata, conta_teto, marker
 
 log = logging.getLogger("clipador.postar_lote")
 
@@ -75,6 +75,8 @@ def lista_auto(pasta: Path, maximo: int = 0) -> list[dict]:
         except ValueError:
             continue
         if d.get("youtube") or not d.get("titulo") or not (pasta / j.with_suffix(".mp4").name).exists():
+            continue
+        if d.get("texto_por") == "local":   # título reserva (genérico, se repete): não vai pro YouTube
             continue
         itens.append({"arquivo": j.with_suffix(".mp4").name, "titulo": d["titulo"], "legenda": d.get("legenda", ""),
                       "hashtags": d.get("hashtags") or [], "_viral": d.get("viral") or 0, "_hype": d.get("hype") or 0})
@@ -144,6 +146,25 @@ def main(argv: list[str] | None = None) -> int:
             log.info("já está no canal, pulando: %s", meta["snippet"]["title"])
             continue
         while True:
+            # deixa vagas das 24h livres pros clips ao vivo (os clips antigos só preenchem o que sobra)
+            ys = settings["youtube"]
+            try:
+                cs = yt.conta_stats(max_age=120)
+            except Exception as e:  # noqa: BLE001
+                log.warning("não consegui contar os envios do canal: %s", e)
+                cs = None
+            livre = conta_teto(ys, conta) - int(ys.get("reserva_live", 4))
+            if cs is not None and cs.ult24h >= livre:
+                if args.esperar_limite and time.monotonic() + 1800 < fim:
+                    log.info("canal com %d envios em 24h (vagas dos antigos: %d); espero 30 min", cs.ult24h, livre)
+                    time.sleep(1800)
+                    continue
+                if args.esperar_limite:
+                    Path(args.restantes).write_text(json.dumps(lista[i:], ensure_ascii=False), encoding="utf-8")
+                    print(f"⏸️ vagas do dia guardadas pras lives; {len(lista) - i} clip(s) ficam pra depois", flush=True)
+                    return 0
+                log.warning("canal com %d envios em 24h; parando pra não ocupar a vaga das lives", cs.ult24h)
+                return 0
             try:
                 url = yt.upload(video, meta, platform, name)
                 print(f"▶️ {i + 1}/{len(lista)} {meta['snippet']['title']}  {url}", flush=True)

@@ -62,6 +62,16 @@ DEFAULT_YOUTUBE: dict[str, Any] = {
     "extreme_hype_ratio": 8.0,  # chat MUITO acima do normal (>= N vezes)...
     "extreme_posts_per_hour": 3,  # ...libera um post extra na hora, sem esperar o espaçamento
     "max_posts_per_day": 50,   # teto diário por canal monitorado
+    # Teto do CANAL do YouTube (todos os streamers somados, últimas 24h). O YouTube trava novos envios
+    # ("uploadLimitExceeded") por volta de 10-15/24h em canal novo; ficar abaixo evita a trava.
+    "max_uploads_24h": {"principal": 11},
+    # Nota de viral mínima conforme o canal enche: até 40% das vagas / até 75% / o resto.
+    # Assim as últimas vagas do dia ficam pros momentos mais fortes, de qualquer streamer.
+    "viral_minimo": [6.5, 7.5, 8.5],
+    "account_min_minutes_between_posts": 20,  # espaço mínimo entre dois envios no MESMO canal do YouTube
+    "reserva_live": 4,         # o postar_lote (clips antigos) deixa N vagas das 24h livres pras lives
+    # Versão horizontal (16:9, tela da live inteira) dos momentos mais fortes, como vídeo normal.
+    "horizontal": {"enabled": False, "min_viral": 8.0, "max_24h": 3, "extra_before_seconds": 20},
     "category_id": "20",       # 20 = Jogos, 24 = Entretenimento
     "made_for_kids": False,
 }
@@ -107,6 +117,8 @@ class Channel:
     hashtags: list[str] | None = None  # hashtags próprias do canal (senão usa settings.hashtags)
     watermark: str | None = None       # texto fixo no vídeo inteiro (ex.: "kick.com/allanstag")
     title_tags: list[str] | None = None  # hashtags que TÊM que estar no título (ex.: ["#allanstag"])
+    so_gta: bool = False       # true = só posta no YouTube os clips de GTA (streamer que joga outras coisas)
+    horizontal: bool = True    # false = nunca posta a versão horizontal deste streamer
 
     def limpar_hashtags(self, tags: list[str]) -> list[str]:
         """Tira hashtag da OUTRA plataforma (ex.: #clipsdetwitch num streamer do Kick)."""
@@ -213,6 +225,8 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         hashtags=raw.get("hashtags"),
         watermark=(str(raw["watermark"]).strip() or None) if raw.get("watermark") else None,
         title_tags=raw.get("title_tags"),
+        so_gta=bool(raw.get("so_gta", False)),
+        horizontal=bool(raw.get("horizontal", True)),
     )
     _validate_channel(ch, where)
     return ch
@@ -277,6 +291,19 @@ def _validate_settings(s: dict[str, Any]) -> None:
     if not isinstance(yt["extreme_hype_ratio"], (int, float)) or yt["extreme_hype_ratio"] < yt["min_hype_ratio"]:
         raise ConfigError("settings.youtube.extreme_hype_ratio deve ser um número >= min_hype_ratio")
     yt["enabled"] = bool(yt["enabled"])
+    tetos = yt["max_uploads_24h"]
+    if isinstance(tetos, int):
+        tetos = {"principal": tetos}
+    if not isinstance(tetos, dict) or not all(isinstance(v, int) and v > 0 for v in tetos.values()):
+        raise ConfigError('settings.youtube.max_uploads_24h deve ser {"principal": 11, "dante": 10, ...}')
+    yt["max_uploads_24h"] = {str(k).lower(): v for k, v in tetos.items()}
+    vm = yt["viral_minimo"]
+    if not (isinstance(vm, list) and len(vm) == 3 and all(isinstance(x, (int, float)) for x in vm)):
+        raise ConfigError("settings.youtube.viral_minimo deve ser uma lista de 3 notas, ex.: [6.5, 7.5, 8.5]")
+    h = dict(DEFAULT_YOUTUBE["horizontal"])
+    h.update(yt.get("horizontal") or {})
+    h["enabled"] = bool(h["enabled"])
+    yt["horizontal"] = h
     s["youtube"] = yt
 
 

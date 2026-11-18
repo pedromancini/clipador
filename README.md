@@ -225,6 +225,13 @@ No fim, o terminal mostra 3 valores.
 | `extreme_hype_ratio` | quando o chat passa de N vezes o normal, é um momento fora da curva... |
 | `extreme_posts_per_hour` | ...e libera um post extra na hora (ex.: 3 em vez de 2), sem esperar o espaçamento |
 | `max_posts_per_day` | teto de Shorts por dia **por canal monitorado** (conta pelo fuso de `timezone`) |
+| `max_uploads_24h` | teto do **canal do YouTube** (todos os streamers somados, últimas 24h), ex.: `{"principal": 11, "dante": 10}`. O YouTube trava envios por volta de 10-15/24h em canal novo |
+| `viral_minimo` | nota mínima da IA pra pegar vaga, conforme o canal enche (até 40% / até 75% / resto). As últimas vagas ficam pros melhores momentos de qualquer streamer. Clip com título reserva (sem IA) não vai pro YouTube |
+| `account_min_minutes_between_posts` | espaço mínimo entre dois envios no mesmo canal do YouTube (hype extremo passa na frente) |
+| `reserva_live` | o postar_lote (clips antigos) deixa N vagas das 24h livres pras lives |
+| `horizontal` | versão 16:9 (tela da live inteira, +20s de contexto) dos momentos com nota ≥ `min_viral`, até `max_24h` por dia, como vídeo normal. Por streamer: `"horizontal": false` desliga |
+
+Por streamer: `"so_gta": true` = só vai pro YouTube quando o clip é de GTA (pra quem também joga outras coisas).
 | `category_id` | `20` = Jogos, `24` = Entretenimento |
 
 Quer que um canal nunca vá pro YouTube (só Telegram)? Coloque `"youtube": false` nele.

@@ -33,6 +33,7 @@ class ClipCopy:
     viral: float | None = None       # 0-10 (só com IA)
     sobre_gta6: bool = False
     fonte: str = "local"             # "gemini" ou "local"
+    titulo_longo: str = ""           # título da versão horizontal (vídeo normal do YouTube)
 
 
 # ------------------------------------------------------------------ plano B (sem IA)
@@ -106,15 +107,37 @@ Contexto:
 
 Regras:
 - "titulo": até 70 caracteres, em português do Brasil informal, que dê vontade de assistir. Use o nome
-  "{canal}". Pode ser uma frase marcante dita no clip (entre aspas) OU uma descrição curiosa do que acontece.
-  NÃO invente nada que não acontece no clip (nem ações, nem falas, nem polêmicas). Se não der pra entender
-  o que acontece, descreva só a reação/o jogo de forma simples. Sem clickbait mentiroso. No máximo 2 emojis.
+  "{canal}". O formato que mais funciona: a FRASE MAIS MARCANTE dita no clip, entre aspas, + o nome
+  (ex.: "Eu não acredito nisso" - {canal} 😂). Se não tiver fala boa, descreva a AÇÃO concreta que acontece
+  (ex.: {canal} cai de avião no meio da missão). PROIBIDO título genérico que serviria pra qualquer clip
+  ("momento mais engraçado da live", "fez o chat chorar de rir", "não aguentou", "momento insano").
+  NÃO invente nada que não acontece no clip (nem ações, nem falas, nem polêmicas). Sem clickbait mentiroso.
+  No máximo 2 emojis. NÃO repita nem imite estes títulos já usados no canal: {evitar}
+- "titulo_longo": título pro vídeo HORIZONTAL do YouTube, até 80 caracteres, sem emojis e sem hashtags:
+  a frase ou ação principal em CAIXA ALTA, depois " - " e uma descrição curta com o nome
+  (ex.: "EU NÃO ACREDITO NISSO" - {canal} reage ao final da missão).
 - "legenda": 1 ou 2 frases curtas pro TikTok (gancho + uma pergunta que puxe comentários). Sem hashtags.
 - "sobre_gta6": true SÓ se o clip fala ou mostra GTA 6 / GTA VI de verdade.
 - "hashtags": 3 a 5 hashtags específicas do conteúdo (jogo, situação). Sem #fyp/#viral (já entram sozinhas).
 - "viral": nota de 0 a 10 de potencial de viralizar (graça, surpresa, frase marcante, contexto que
   quem não conhece o streamer entende). Seja exigente: 8+ só para momentos realmente fortes.
-Responda SÓ o JSON: {{"titulo": "...", "legenda": "...", "sobre_gta6": false, "hashtags": ["#..."], "viral": 0}}"""
+Responda SÓ o JSON: {{"titulo": "...", "titulo_longo": "...", "legenda": "...", "sobre_gta6": false, "hashtags": ["#..."], "viral": 0}}"""
+
+
+def _sem_acento(t: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", t or "") if unicodedata.category(c) != "Mn")
+
+
+def hashtag_relacionada(tag: str, contexto: str, canal: str) -> bool:
+    """A hashtag tem a ver com o clip? (a IA às vezes inventa coisa tipo #justvolleyball num clip de GTA)"""
+    w = _sem_acento(tag.lstrip("#")).lower()
+    if not w:
+        return False
+    if "gta" in w or (canal and canal.lower() in w):
+        return True
+    ctx = re.sub(r"[^a-z0-9]", "", _sem_acento(contexto).lower())
+    return len(w) >= 4 and w in ctx
 
 
 class Copywriter:
@@ -205,11 +228,12 @@ class Copywriter:
 
     def gemini_copy(self, channel: str, audio_path: Path | None, transcript: str, peak_offset: float,
                     top_messages: list[tuple[str, int]], category: str | None, stream_title: str | None,
-                    base_tags: list[str]) -> ClipCopy:
+                    base_tags: list[str], evitar: list[str] | None = None) -> ClipCopy:
         chat = ", ".join(f"{m} ({n}x)" for m, n in (top_messages or [])[:6]) or "(sem dados)"
+        ev = "; ".join(f'"{t}"' for t in (evitar or [])[-20:]) or "(nenhum)"
         prompt = PROMPT.format(canal=channel, titulo_live=stream_title or "(desconhecido)",
                                categoria=category or "(desconhecida)", pico=peak_offset, chat=chat,
-                               fala=(transcript or "(sem fala detectada)")[:1500])
+                               fala=(transcript or "(sem fala detectada)")[:1500], evitar=ev)
         parts: list[dict] = []
         if audio_path and Path(audio_path).exists() and Path(audio_path).stat().st_size < 15_000_000:
             parts.append({"inline_data": {"mime_type": "audio/wav",
@@ -227,15 +251,19 @@ class Copywriter:
         if gta and not _GTA6_RE.search(titulo):
             titulo = "GTA 6: " + titulo
         legenda = re.sub(r"#\S+", "", str(d.get("legenda", ""))).strip() or titulo
+        contexto = f"{transcript} {category} {stream_title} {titulo} {legenda}"
         extras = [str(h) for h in (d.get("hashtags") or []) if isinstance(h, str)][:5]
+        extras = [h for h in extras if hashtag_relacionada(h, contexto, channel)]
         viral = d.get("viral")
         viral = max(0.0, min(10.0, float(viral))) if isinstance(viral, (int, float)) else None
+        longo = re.sub(r"#\S+", "", re.sub(r"\s+", " ", str(d.get("titulo_longo") or ""))).strip()
         return ClipCopy(titulo=titulo[:95], legenda=legenda[:300], viral=viral, sobre_gta6=gta,
-                        hashtags=_hashtags(base_tags, channel, gta, extras, limite=8), fonte="gemini")
+                        hashtags=_hashtags(base_tags, channel, gta, extras, limite=8), fonte="gemini",
+                        titulo_longo=longo[:85])
 
     def make(self, channel: str, words, transcript: str, audio_path: Path | None, peak_offset: float,
              top_messages: list[tuple[str, int]], category: str | None, stream_title: str | None,
-             base_tags: list[str]) -> ClipCopy:
+             base_tags: list[str], evitar: list[str] | None = None) -> ClipCopy:
         """Texto do post: Gemini se configurado, senão (ou se falhar) o plano B local."""
         base = [t for t in base_tags if t.lower() not in ("#gta6", "#gta", "#gtavi")]
         if self.configured and self._falhas_seguidas >= 5 and time.time() >= self._pausa_ate:
@@ -243,7 +271,7 @@ class Copywriter:
         if self.configured and self._falhas_seguidas < 5:
             try:
                 c = self.gemini_copy(channel, audio_path, transcript, peak_offset, top_messages, category,
-                                     stream_title, base)
+                                     stream_title, base, evitar)
                 self._falhas_seguidas = 0
                 log.info("título (IA, viral %s/10): %s", c.viral, c.titulo)
                 return c
