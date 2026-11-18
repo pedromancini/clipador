@@ -45,6 +45,24 @@ def metadados(item: dict, settings: dict) -> tuple[dict, str, str]:
     return meta, platform, name
 
 
+def lista_auto(pasta: Path, maximo: int = 0) -> list[dict]:
+    """Clips da pasta que ainda não foram pro YouTube (pelo .json de cada um), do mais viral pro menos."""
+    itens = []
+    for j in sorted(pasta.glob("*.json")):
+        try:
+            d = json.loads(j.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if d.get("youtube") or not d.get("titulo") or not (pasta / j.with_suffix(".mp4").name).exists():
+            continue
+        itens.append({"arquivo": j.with_suffix(".mp4").name, "titulo": d["titulo"], "legenda": d.get("legenda", ""),
+                      "hashtags": d.get("hashtags") or [], "_viral": d.get("viral") or 0, "_hype": d.get("hype") or 0})
+    itens.sort(key=lambda x: (-x["_viral"], -x["_hype"]))
+    for it in itens:
+        it.pop("_viral"), it.pop("_hype")
+    return itens[:maximo] if maximo else itens
+
+
 def conta_do(item: dict) -> str:
     """Conta do YouTube do canal do clip ("" = canal principal)."""
     m = _NOME_RE.match(item["arquivo"])
@@ -60,13 +78,18 @@ def main(argv: list[str] | None = None) -> int:
                     help="se o canal estiver no limite de envios, espera e tenta de novo a cada 30 min")
     ap.add_argument("--prazo", type=float, default=330, help="minutos máximos desta execução")
     ap.add_argument("--restantes", default="restantes.json", help="onde salvar o que não deu tempo de postar")
+    ap.add_argument("--max", type=int, default=0, help="lista \"auto\": quantos postar (0 = todos)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 
     bruto = args.lista
-    if not bruto.lstrip().startswith("["):
-        bruto = Path(bruto).read_text(encoding="utf-8")
-    lista = json.loads(bruto)
+    if bruto.strip().lower() != "auto" and not bruto.lstrip().startswith("["):
+        bruto = Path(bruto).read_text(encoding="utf-8")   # caminho de arquivo
+    if bruto.strip().lower() == "auto":
+        lista = lista_auto(Path(args.dir), args.max)
+        print(f"auto: {len(lista)} clip(s) ainda não postados no YouTube", flush=True)
+    else:
+        lista = json.loads(bruto)
     settings = load_config().settings
     contas: dict[str, YouTube] = {}
 

@@ -10,11 +10,14 @@ on:
         description: "ID da execução do clipador que gerou os clips (artifact ainda válido, 3 dias)"
         required: true
       lista:
-        description: 'JSON: [{"arquivo": "twitch-x_20261116-211240.mp4", "titulo": "...", "legenda": "...", "hashtags": ["#x"]}]'
+        description: 'auto (os não postados, mais virais primeiro) ou JSON: [{"arquivo": "...mp4", "titulo": "...", "legenda": "...", "hashtags": ["#x"]}]'
         required: true
       intervalo:
         description: "Minutos entre um post e outro"
         default: "20"
+      max:
+        description: "Com lista=auto: quantos postar (0 = todos)"
+        default: "0"
       esperar_limite:
         description: "Se o canal estiver no limite de envios, esperar liberar (e se re-disparar se precisar)"
         type: boolean
@@ -57,7 +60,7 @@ jobs:
             gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "baixados/$id.zip"
             unzip -o -q "baixados/$id.zip" -d baixados
           done
-          find baixados -name '*.mp4' -exec mv {} clips/ \;
+          find baixados \( -name '*.mp4' -o -name '*.json' \) -exec mv {} clips/ \;
           ls clips
 
       - name: Postar
@@ -65,9 +68,10 @@ jobs:
           LISTA: ${{ inputs.lista }}
           INTERVALO: ${{ inputs.intervalo }}
           ESPERAR: ${{ inputs.esperar_limite && '--esperar-limite' || '' }}
+          MAX: ${{ inputs.max || '0' }}
         run: |
           printf '%s' "$LISTA" > lista.json
-          python -m clipador.postar_lote --dir clips --lista lista.json --intervalo "$INTERVALO" $ESPERAR
+          python -m clipador.postar_lote --dir clips --lista lista.json --intervalo "$INTERVALO" --max "$MAX" $ESPERAR
 
       - name: Faltou postar? Dispara de novo com o resto
         if: hashFiles('restantes.json') != ''
