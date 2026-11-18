@@ -95,9 +95,16 @@ def listar_artifacts(repo: str) -> list[dict]:
 
 
 def baixar_artifact(repo: str, art_id: int) -> list[Clip]:
-    zbytes = gh("api", f"repos/{repo}/actions/artifacts/{art_id}/zip", binary=True)
+    # grava direto no disco (pacotes de ~200 MB em conexão lenta passam de 10 min)
+    import tempfile
+    tmp = Path(tempfile.gettempdir()) / f"clipador_{art_id}.zip"
+    with open(tmp, "wb") as f:
+        p = subprocess.run(["gh", "api", f"repos/{repo}/actions/artifacts/{art_id}/zip"], stdout=f,
+                           stderr=subprocess.PIPE, timeout=3 * 3600)
+    if p.returncode != 0:
+        raise RuntimeError(f"falha ao baixar o artifact {art_id}: {p.stderr.decode(errors='replace')[:300]}")
     clips: list[Clip] = []
-    with zipfile.ZipFile(io.BytesIO(zbytes)) as z:
+    with zipfile.ZipFile(tmp) as z:
         nomes = set(z.namelist())
         for n in sorted(nomes):
             if not n.lower().endswith(".mp4") or "/" in n or "\\" in n:
@@ -110,6 +117,7 @@ def baixar_artifact(repo: str, art_id: int) -> list[Clip]:
                 except ValueError:
                     dados = {}
             clips.append(Clip(n, z.read(n), dados))
+    tmp.unlink(missing_ok=True)
     return clips
 
 
