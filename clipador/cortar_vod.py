@@ -59,12 +59,45 @@ def baixar(vod: str, inicio: int, duracao: int, destino: Path) -> None:
     if ".m3u8" in vod:  # VOD do Kick (link direto do vídeo)
         cmd = [ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", str(inicio),
                "-i", _melhor_variante(vod), "-t", str(duracao), "-c", "copy", "-f", "mpegts", str(destino)]
+        subprocess.run(cmd, check=True, timeout=1800)
     else:
-        cmd = [sys.executable, "-m", "streamlink", "--hls-start-offset", ini, "--hls-duration", str(duracao),
-               "-o", str(destino), "--force", vod, "1080p60,1080p,936p60,720p60,720p,best"]
-    subprocess.run(cmd, check=True, timeout=1800)
+        _baixar_por_segmentos(vod, inicio, duracao, destino)
     if not destino.exists() or destino.stat().st_size < 100_000:
         raise RuntimeError("download do VOD falhou")
+
+
+def _baixar_por_segmentos(vod: str, inicio: int, duracao: int, destino: Path) -> None:
+    """Twitch: baixa só os pedaços da playlist que cobrem o trecho, contando o tempo pelos #EXTINF.
+
+    (O --hls-start-offset do streamlink erra por minutos quando o VOD ainda está sendo gravado.)"""
+    import requests
+    url = subprocess.run([sys.executable, "-m", "streamlink", "--stream-url", vod,
+                          "1080p60,1080p,936p60,720p60,720p,best"],
+                         capture_output=True, text=True, check=True, timeout=120).stdout.strip()
+    linhas = requests.get(url, timeout=30).text.splitlines()
+    init, segs, t = None, [], 0.0
+    for i, l in enumerate(linhas):
+        m = re.search(r'#EXT-X-MAP:URI="([^"]+)"', l)
+        if m:
+            init = urljoin(url, m.group(1))
+        if l.startswith("#EXTINF") and i + 1 < len(linhas):
+            d = float(l.split(":", 1)[1].split(",")[0])
+            segs.append((t, d, urljoin(url, linhas[i + 1].strip())))
+            t += d
+    sel = [s for s in segs if s[0] + s[1] > inicio and s[0] < inicio + duracao]
+    if not sel:
+        raise RuntimeError(f"o VOD só tem {t / 60:.0f} min; o trecho pedido ainda não existe")
+    bruto = destino.with_suffix(".raw")
+    with open(bruto, "wb") as f:
+        if init:
+            f.write(requests.get(init, timeout=60).content)
+        for _, _, u in sel:
+            f.write(requests.get(u, timeout=120).content)
+    desloc = inicio - sel[0][0]
+    subprocess.run([ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", f"{desloc:.3f}",
+                    "-i", str(bruto), "-t", str(duracao), "-c", "copy", "-f", "mpegts", str(destino)],
+                   check=True, timeout=600)
+    bruto.unlink(missing_ok=True)
 
 
 def kick_vod(url: str) -> tuple[str, float, str | None, str | None]:
