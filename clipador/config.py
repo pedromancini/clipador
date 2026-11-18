@@ -40,6 +40,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "max_quality": 1080,
     "fps": 30,
     # Legenda
+    "subtitles": True,            # false = clips sem legenda queimada (a fala ainda é transcrita p/ o título)
     "subtitle_size": 80,          # tamanho da fonte (1080x1920). 124 = grande, 80 = médio/pequeno
     "subtitle_position": "middle",  # "middle" (meio; no facecam fica na divisa cam/jogo) ou "bottom"
     "whisper_model": "base",

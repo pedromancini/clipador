@@ -17,6 +17,7 @@
     "max_quality": 1080,
     "fps": 30,
 
+    "subtitles": false,
     "subtitle_size": 80,
     "subtitle_position": "middle",
     "whisper_model": "base",

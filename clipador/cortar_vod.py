@@ -171,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out) / f"{ch.slug}_{quando:%Y%m%d-%H%M%S}.mp4"
 
     res = build_clip([(0.0, src)], 0.0, dur, out, work / "clip", layout=ch.layout, facecam=ch.facecam,
-                     fps=int(s["fps"]), with_subtitles=True, whisper_model=s["whisper_model"],
+                     fps=int(s["fps"]), with_subtitles=True, burn_subtitles=bool(s["subtitles"]), whisper_model=s["whisper_model"],
                      language=s["language"], facecam_auto=ch.facecam_auto,
                      sub_size=int(s["subtitle_size"]), sub_position=s["subtitle_position"],
                      watermark=ch.watermark)

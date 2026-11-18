@@ -132,6 +132,7 @@ def build_clip(
     facecam: Facecam | None = None,
     fps: int = 30,
     with_subtitles: bool = True,
+    burn_subtitles: bool = True,  # False = transcreve (p/ título da IA) mas não queima no vídeo
     whisper_model: str = "base",
     language: str = "pt",
     facecam_auto: bool = False,
@@ -179,7 +180,9 @@ def build_clip(
                   "-ss", f"{offset:.3f}", "-i", str(src), "-t", f"{duration:.3f}",
                   "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)], cwd=workdir)
             words = subs.transcribe(wav, whisper_model, language)
-            if words:
+            if words and not burn_subtitles:
+                log.info("legenda desligada (subtitles=false); só transcrição p/ o título")
+            elif words:
                 if sub_position == "middle":
                     centro = 590 if layout == "facecam" else H // 2  # facecam: base da cam (não cobre o HUD do jogo)
                 else:
