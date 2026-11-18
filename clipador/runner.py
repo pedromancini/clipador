@@ -20,6 +20,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 from . import summary
@@ -31,7 +32,7 @@ from .detector import HypeDetector, Peak
 from .recorder import Recorder, select_segments
 from .stream import StreamInfo, get_stream_info, make_session
 from .telegram import Telegram, build_caption
-from .youtube import YouTube, build_metadata, decide
+from .youtube import YouTube, YouTubeLimitError, build_metadata, decide
 
 log = logging.getLogger("clipador.runner")
 
@@ -59,6 +60,7 @@ class ChannelRunner:
         self.yt_settings = self.s.get("youtube") or dict(DEFAULT_YOUTUBE)
         self.yt = youtube or YouTube.from_env(self.s["timezone"], channel.youtube_conta)
         self.hashtags = channel.hashtags or self.s["hashtags"]
+        self._yt_pausa_ate = 0.0   # limite de envios do canal: não tenta de novo antes disso
         self.copy = Copywriter()        # título/legenda com IA (GEMINI_API_KEY) ou plano B local
         self.post_forced = post_forced   # --post-youtube: posta até o clip de teste (--once)
 
@@ -216,6 +218,9 @@ class ChannelRunner:
             return None
         if not self.yt.configured:
             return "⚠️ YouTube ligado no channels.json, mas faltam os secrets YOUTUBE_*"
+        if time.time() < self._yt_pausa_ate:
+            volta = datetime.fromtimestamp(self._yt_pausa_ate, ZoneInfo(self.s["timezone"])).strftime("%H:%M")
+            return f"⏸️ YouTube: canal no limite de envios, tento de novo às {volta}"
         try:
             st = self.yt.stats(self.ch.platform, self.ch.name)
             d = decide(ys, self.ch.youtube, peak.ratio, peak.forced, st, allow_forced=self.post_forced)
@@ -228,6 +233,11 @@ class ChannelRunner:
             url = self.yt.upload(res.path, meta, self.ch.platform, self.ch.name)
             extra = " 🔥 post extra" if d.extreme else ""
             return f"▶️ Postado no YouTube ({st.today + 1}º hoje, {d.reason}){extra}: {url}"
+        except YouTubeLimitError as e:
+            self._yt_pausa_ate = time.time() + 2 * 3600
+            log.warning("YouTube: %s; pausando os posts por 2h", e)
+            self.tg.send_error(f"{self.ch.slug}: {e}", min_interval=7200)
+            return f"⏸️ YouTube: {e}"
         except Exception as e:  # noqa: BLE001
             log.exception("YouTube falhou")
             self.tg.send_error(f"{self.ch.slug}: postagem no YouTube falhou: {e}", min_interval=1800)

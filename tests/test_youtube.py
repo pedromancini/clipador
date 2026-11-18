@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from clipador.config import DEFAULT_YOUTUBE
-from clipador.youtube import PostStats, YouTube, YouTubeError, build_metadata, decide, marker
+from clipador.youtube import PostStats, YouTube, YouTubeError, YouTubeLimitError, build_metadata, decide, marker
 
 
 def resp(status=200, body=None, headers=None):
@@ -154,6 +154,19 @@ class TestApi(unittest.TestCase):
             with self.assertRaises(YouTubeError) as ctx:
                 self.yt().upload(f, meta, "kick", "c")
         self.assertIn("cota", str(ctx.exception))
+
+    @mock.patch("clipador.youtube.requests")
+    def test_limite_de_envios_do_canal(self, req):
+        req.post.side_effect = [
+            resp(body={"access_token": "tok", "expires_in": 3600}),
+            resp(400, body={"error": {"errors": [{"reason": "uploadLimitExceeded"}]}}),
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "c.mp4"
+            f.write_bytes(b"0")
+            meta = build_metadata("t", "c", "Kick", "u", [], "kick", "20", "public", False)
+            with self.assertRaises(YouTubeLimitError):
+                self.yt().upload(f, meta, "kick", "c")
 
     def test_nao_configurado(self):
         self.assertFalse(YouTube(None, None, None).configured)

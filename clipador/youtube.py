@@ -41,6 +41,17 @@ class YouTubeError(RuntimeError):
     pass
 
 
+class YouTubeLimitError(YouTubeError):
+    """O canal bateu o teto de envios do YouTube (uploadLimitExceeded). Não é a cota da API: é um limite
+    da conta, menor em canal novo/sem verificação. Libera sozinho depois de algumas horas."""
+
+
+def _checa_limite(resp) -> None:
+    if resp.status_code in (400, 403) and "uploadLimitExceeded" in resp.text:
+        raise YouTubeLimitError("o canal atingiu o limite de envios do YouTube por enquanto "
+                                "(uploadLimitExceeded; verificar o canal em youtube.com/verify aumenta o limite)")
+
+
 def marker(platform: str, name: str) -> str:
     return f"clipador:{platform}/{name}"
 
@@ -265,6 +276,7 @@ class YouTube:
                              "X-Upload-Content-Type": "video/mp4", "X-Upload-Content-Length": str(size)},
                     data=json.dumps(metadata), timeout=60)
                 if init.status_code != 200:
+                    _checa_limite(init)
                     if init.status_code == 403 and "quota" in init.text.lower():
                         raise YouTubeError("cota diária da API do YouTube esgotada (volta amanhã)")
                     if init.status_code in (400, 401, 403):
@@ -284,6 +296,7 @@ class YouTube:
                                     metadata["status"]["privacyStatus"])
                     log.info("postado no YouTube: %s", url)
                     return url
+                _checa_limite(r)
                 if r.status_code in (400, 401, 403):
                     raise YouTubeError(f"upload recusado: {r.status_code} {r.text[:400]}")
                 ultimo_erro = f"{r.status_code} {r.text[:200]}"

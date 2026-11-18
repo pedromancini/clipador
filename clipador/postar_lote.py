@@ -89,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:  # noqa: BLE001
             log.error("falhou %s: %s", item["arquivo"], e)
             falhas += 1
-            if "cota" in str(e):
+            if "cota" in str(e) or "limite de envios" in str(e):
                 break
             continue
         if i < len(lista) - 1 and args.intervalo > 0:
