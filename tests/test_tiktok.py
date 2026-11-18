@@ -36,7 +36,7 @@ class TestAgenda(unittest.TestCase):
 
 class TestArquivos(unittest.TestCase):
     def test_nome_seguro(self):
-        self.assertEqual(nome_seguro('GTA 6: ele "caiu" <de novo>? #fyp'), "GTA 6 ele caiu de novo fyp")
+        self.assertEqual(nome_seguro('GTA 6: ele "caiu" <de novo>? #fyp'), "GTA 6 ele caiu de novo")  # hashtag não vai pro nome
         self.assertEqual(nome_seguro("???"), "clip")
 
     def test_legenda_sem_json_usa_nome_do_arquivo(self):
