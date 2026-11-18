@@ -187,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         texto = Copywriter().make(ch.name, res.words, res.transcript, wav if wav.exists() else None,
                                   dur / 2, [], categoria, titulo_live, tags)
     texto.titulo = ch.titulo_com_tags(texto.titulo)
+    texto.hashtags = ch.limpar_hashtags(texto.hashtags)
     print(f"TÍTULO: {texto.titulo}\nLEGENDA: {texto.legenda}\nHASHTAGS: {' '.join(texto.hashtags)}", flush=True)
 
     url = None

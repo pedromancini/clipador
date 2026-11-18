@@ -141,7 +141,8 @@ def agendar(clips: list[Clip], livres: list[datetime]) -> list[tuple[Clip, datet
 
 # ------------------------------------------------------------------ arquivos
 def nome_seguro(txt: str, limite: int = 60) -> str:
-    txt = re.sub(r'[<>:"/\\|?*\x00-\x1f#]', "", txt)
+    txt = re.sub(r"#\w+", "", txt)  # hashtags não entram no nome do arquivo
+    txt = re.sub(r'[<>:"/\|?*\x00-\x1f]', "", txt)
     txt = re.sub(r"[^\w\s\-.,!áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ]", "", txt)
     txt = re.sub(r"\s+", " ", txt).strip(" .")
     return (txt[:limite].rstrip(" .") or "clip")
@@ -149,6 +150,21 @@ def nome_seguro(txt: str, limite: int = 60) -> str:
 
 def pasta_do_dia(raiz: Path, dia: datetime) -> Path:
     return raiz / f"{dia:%Y-%m-%d} ({DIAS[dia.weekday()]})"
+
+
+def canal_do(c: Clip) -> str:
+    return (c.dados.get("canal") or c.nome.split("_")[0].partition("-")[2] or "outros").lower()
+
+
+def _tags_obrigatorias(canal: str) -> list[str]:
+    try:
+        from .config import load_config
+        for ch in load_config().channels:
+            if ch.name == canal:
+                return list(ch.title_tags or [])
+    except Exception:  # noqa: BLE001
+        pass
+    return []
 
 
 def legenda(c: Clip) -> str:
@@ -161,6 +177,9 @@ def legenda(c: Clip) -> str:
     credito = f"Créditos: {url.replace('https://', '').replace('www.', '')}" if url else f"Créditos: {canal}"
     gancho = (d.get("legenda") or "").strip()
     corpo = gancho if gancho and gancho != titulo else titulo
+    faltam = [t for t in _tags_obrigatorias(canal) if t.lower() not in corpo.lower()]
+    if faltam:  # regra do campeonato: a hashtag tem que estar no texto principal
+        corpo = f"{corpo} {' '.join(faltam)}"
     return f"{corpo}\n\n{credito}\n\n{' '.join(tags)}"
 
 
@@ -264,23 +283,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  baixando {art['name']} ({art['size_in_bytes'] / 1e6:.0f} MB)...")
         clips += baixar_artifact(repo, art["id"])
 
-    livres = proximos_horarios(agora_local(), carregar_horarios(), ocupados)
-    agenda = agendar(clips, livres)
-    for c, quando in sorted(agenda, key=lambda x: (x[1] is None, x[1] or datetime.min)):
-        destino = salvar(raiz, c, quando)
-        if quando:
-            ocupados.add(quando.strftime("%Y-%m-%d %H:%M"))
-            print(f"  {quando:%d/%m %Hh%M}  {destino.name}")
+    # cada streamer tem a sua pasta e os seus horários (podem ser contas de TikTok diferentes)
+    por_canal: dict[str, list[Clip]] = {}
+    for c in clips:
+        por_canal.setdefault(canal_do(c), []).append(c)
+    agenda: list[tuple[Clip, datetime | None]] = []
+    for canal, lista in sorted(por_canal.items()):
+        print(f"\n{canal}:")
+        ocup_c = {h.split("|", 1)[1] for h in ocupados if h.startswith(f"{canal}|")}
+        livres = proximos_horarios(agora_local(), carregar_horarios(), ocup_c)
+        ag = agendar(lista, livres)
+        agenda += ag
+        for c, quando in sorted(ag, key=lambda x: (x[1] is None, x[1] or datetime.min)):
+            destino = salvar(raiz / canal, c, quando)
+            if quando:
+                ocupados.add(f"{canal}|{quando:%Y-%m-%d %H:%M}")
+                print(f"  {quando:%d/%m %Hh%M}  {destino.name}")
 
     baixados.update(x["id"] for x in novos)
     hoje = agora_local().strftime("%Y-%m-%d")
     estado = {"artifacts_baixados": sorted(baixados),
-              "horarios_ocupados": sorted(h for h in ocupados if h[:10] >= hoje)}
+              "horarios_ocupados": sorted(h for h in ocupados if h.split("|")[-1][:10] >= hoje)}
     est_path.write_text(json.dumps(estado, indent=1), encoding="utf-8")
 
     agendados = sum(1 for _, q in agenda if q)
     print(f"\nPronto: {len(clips)} clips baixados, {agendados} com horário marcado, "
-          f"{len(clips) - agendados} em 'extras'.\nPasta: {raiz}")
+          f"{len(clips) - agendados} em 'extras'.\nPasta: {raiz} (uma subpasta por streamer)")
     return 0
 
 

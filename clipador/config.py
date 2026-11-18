@@ -107,6 +107,11 @@ class Channel:
     watermark: str | None = None       # texto fixo no vídeo inteiro (ex.: "kick.com/allanstag")
     title_tags: list[str] | None = None  # hashtags que TÊM que estar no título (ex.: ["#allanstag"])
 
+    def limpar_hashtags(self, tags: list[str]) -> list[str]:
+        """Tira hashtag da OUTRA plataforma (ex.: #clipsdetwitch num streamer do Kick)."""
+        outra = "kick" if self.platform == "twitch" else "twitch"
+        return [t for t in tags if outra not in t.lower()]
+
     def titulo_com_tags(self, titulo: str, limite: int = 91) -> str:
         """Garante as hashtags obrigatórias no título (cabendo no limite do YouTube com ' #Shorts')."""
         faltam = [t for t in (self.title_tags or []) if t.lower() not in titulo.lower()]

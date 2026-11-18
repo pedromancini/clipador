@@ -162,6 +162,7 @@ class ChannelRunner:
                                    max(0.0, peak.t - t0), peak.top_messages, info.category, info.title,
                                    self.hashtags)
             texto.titulo = self.ch.titulo_com_tags(texto.titulo)
+            texto.hashtags = self.ch.limpar_hashtags(texto.hashtags)
             yt_line = self._maybe_post_youtube(res, peak, info, texto)
             # resumo na página do job (não depende do Telegram)
             try:
