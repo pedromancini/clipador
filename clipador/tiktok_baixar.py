@@ -196,7 +196,7 @@ def texto_txt(c: Clip, quando: datetime | None) -> str:
     if quando:
         linhas.append(f"POSTAR: {DIAS[quando.weekday()]} {quando:%d/%m} às {quando:%Hh%M}")
     else:
-        linhas.append("EXTRA: sem horário (poste se quiser mais um no dia)")
+        linhas.append("POSTAR: quando quiser (o número no nome = ordem, do mais viral pro menos)")
     linhas += ["", "LEGENDA (copie e cole no TikTok):", "-" * 40, legenda(c), "-" * 40, ""]
     q = c.quando
     if q:
@@ -229,6 +229,62 @@ def salvar(raiz: Path, c: Clip, quando: datetime | None) -> Path:
     destino.write_bytes(c.video)
     destino.with_suffix(".txt").write_text(texto_txt(c, quando), encoding="utf-8-sig")  # BOM: Bloco de Notas ok
     return destino
+
+
+def pasta_tipo(raiz: Path, c: Clip) -> Path:
+    """<canal>/18-11 (quarta) - novos   ou   <canal>/18-11 (quarta) - já no YouTube"""
+    d = c.quando or datetime.now()
+    tipo = "já no YouTube" if c.dados.get("youtube") else "novos"
+    return raiz / canal_do(c) / f"{d:%d-%m} ({DIAS[d.weekday()]}) - {tipo}"
+
+
+_NUM_RE = re.compile(r"^\d{2,3} - ")
+
+
+def renumerar(pasta: Path) -> None:
+    """Renomeia os clips da pasta pra '01 - título', '02 - ...' do mais viral pro menos."""
+    idx_path = pasta / ".notas.json"
+    try:
+        notas = json.loads(idx_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        notas = {}
+    vids = sorted(pasta.glob("*.mp4"))
+    bases = [(_NUM_RE.sub("", v.stem), v) for v in vids]
+    bases.sort(key=lambda bv: (-float(notas.get(bv[0], 0) or 0), bv[0].lower()))
+    temp = []
+    for i, (base, v) in enumerate(bases, 1):  # 2 passos: evita colisão de nomes
+        t = v.with_name(f"__tmp{i}.mp4")
+        v.rename(t)
+        txt = v.with_suffix(".txt")
+        if txt.exists():
+            txt.rename(t.with_suffix(".txt"))
+        temp.append((base, t, i))
+    for base, t, i in temp:
+        final = pasta / f"{i:02d} - {base}.mp4"
+        t.rename(final)
+        if t.with_suffix(".txt").exists():
+            t.with_suffix(".txt").rename(final.with_suffix(".txt"))
+
+
+def salvar_por_tipo(raiz: Path, c: Clip) -> Path:
+    pasta = pasta_tipo(raiz, c)
+    pasta.mkdir(parents=True, exist_ok=True)
+    base = nome_seguro(c.dados.get("titulo") or Path(c.nome).stem)
+    existentes = {_NUM_RE.sub("", v.stem) for v in pasta.glob("*.mp4")}
+    b, n = base, 2
+    while b in existentes:
+        b, n = f"{base} ({n})", n + 1
+    destino = pasta / f"99 - {b}.mp4"
+    destino.write_bytes(c.video)
+    destino.with_suffix(".txt").write_text(texto_txt(c, None), encoding="utf-8-sig")
+    idx_path = pasta / ".notas.json"
+    try:
+        notas = json.loads(idx_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        notas = {}
+    notas[b] = c.viral if c.viral >= 0 else 0
+    idx_path.write_text(json.dumps(notas, ensure_ascii=False, indent=1), encoding="utf-8")
+    return pasta
 
 
 # ------------------------------------------------------------------ principal
@@ -291,22 +347,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  baixando {art['name']} ({art['size_in_bytes'] / 1e6:.0f} MB)...")
         clips += baixar_artifact(repo, art["id"])
 
-    # cada streamer tem a sua pasta e os seus horários (podem ser contas de TikTok diferentes)
-    por_canal: dict[str, list[Clip]] = {}
+    # <streamer>/<dia> - novos | - já no YouTube, numerados do mais viral pro menos
+    pastas: dict[Path, int] = {}
     for c in clips:
-        por_canal.setdefault(canal_do(c), []).append(c)
-    agenda: list[tuple[Clip, datetime | None]] = []
-    for canal, lista in sorted(por_canal.items()):
-        print(f"\n{canal}:")
-        ocup_c = {h.split("|", 1)[1] for h in ocupados if h.startswith(f"{canal}|")}
-        livres = proximos_horarios(agora_local(), carregar_horarios(), ocup_c)
-        ag = agendar(lista, livres)
-        agenda += ag
-        for c, quando in sorted(ag, key=lambda x: (x[1] is None, x[1] or datetime.min)):
-            destino = salvar(raiz / canal, c, quando)
-            if quando:
-                ocupados.add(f"{canal}|{quando:%Y-%m-%d %H:%M}")
-                print(f"  {quando:%d/%m %Hh%M}  {destino.name}")
+        pasta = salvar_por_tipo(raiz, c)
+        pastas[pasta] = pastas.get(pasta, 0) + 1
+    for pasta, n in sorted(pastas.items()):
+        renumerar(pasta)
+        print(f"  +{n:>2}  {pasta.relative_to(raiz)}")
+    agenda = [(c, None) for c in clips]
 
     baixados.update(x["id"] for x in novos)
     hoje = agora_local().strftime("%Y-%m-%d")
@@ -314,9 +363,8 @@ def main(argv: list[str] | None = None) -> int:
               "horarios_ocupados": sorted(h for h in ocupados if h.split("|")[-1][:10] >= hoje)}
     est_path.write_text(json.dumps(estado, indent=1), encoding="utf-8")
 
-    agendados = sum(1 for _, q in agenda if q)
-    print(f"\nPronto: {len(clips)} clips baixados, {agendados} com horário marcado, "
-          f"{len(clips) - agendados} em 'extras'.\nPasta: {raiz} (uma subpasta por streamer)")
+    print(f"\nPronto: {len(clips)} clips baixados.\nPasta: {raiz}\n"
+          f"(em cada pasta, o 01 é o mais viral; 'já no YouTube' = a live já postou esse no YouTube)")
     return 0
 
 
