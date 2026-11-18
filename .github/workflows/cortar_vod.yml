@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       vod:
-        description: "Link do VOD (https://www.twitch.tv/videos/...)"
+        description: "Link do VOD (twitch.tv/videos/..., kick.com/<canal>/videos/<id> ou link .m3u8)"
         required: true
       inicio:
         description: "Onde começa no VOD (mm:ss ou hh:mm:ss)"
@@ -22,6 +22,9 @@ on:
         default: ""
       legenda:
         description: "Legenda / gancho (opcional)"
+        default: ""
+      vod_inicio:
+        description: "Só p/ link .m3u8: hora UTC em que o VOD começou (ex.: 2026-11-18T10:35:08Z)"
         default: ""
       postar:
         description: "Postar no YouTube"
@@ -72,10 +75,11 @@ jobs:
           CANAL: ${{ inputs.canal }}
           TITULO: ${{ inputs.titulo }}
           LEGENDA: ${{ inputs.legenda }}
+          VOD_INICIO: ${{ inputs.vod_inicio }}
           POSTAR: ${{ inputs.postar && '--postar' || '' }}
         run: |
           python -m clipador.cortar_vod "$VOD" --inicio "$INICIO" --duracao "$DURACAO" --canal "$CANAL" \
-            --titulo "$TITULO" --legenda "$LEGENDA" $POSTAR
+            --titulo "$TITULO" --legenda "$LEGENDA" --vod-inicio "$VOD_INICIO" $POSTAR
 
       - name: Guardar o clip (artifact, 3 dias; o baixador do TikTok pega daqui)
         if: always()

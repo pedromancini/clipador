@@ -11,14 +11,17 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import shutil
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urljoin
 
 from .clipper import build_clip
+from .recorder import ffmpeg_bin
 from .config import ROOT, load_config, parse_channel_ref
 from .copywriter import ClipCopy, Copywriter
 from .youtube import YouTube, build_metadata
@@ -35,19 +38,56 @@ def segundos(txt: str) -> int:
     return s
 
 
+def _melhor_variante(m3u8: str) -> str:
+    """Do master.m3u8 do Kick, a variante de maior qualidade (ou o próprio link se já for variante)."""
+    import requests
+    txt = requests.get(m3u8, timeout=20).text
+    linhas = txt.splitlines()
+    melhor, banda = m3u8, -1
+    for i, l in enumerate(linhas):
+        if l.startswith("#EXT-X-STREAM-INF") and i + 1 < len(linhas):
+            m = re.search(r"BANDWIDTH=(\d+)", l)
+            b = int(m.group(1)) if m else 0
+            if b > banda:
+                banda, melhor = b, urljoin(m3u8, linhas[i + 1].strip())
+    return melhor
+
+
 def baixar(vod: str, inicio: int, duracao: int, destino: Path) -> None:
     ini = f"{inicio // 3600:02d}:{inicio % 3600 // 60:02d}:{inicio % 60:02d}"
-    cmd = [sys.executable, "-m", "streamlink", "--hls-start-offset", ini, "--hls-duration", str(duracao),
-           "-o", str(destino), "--force", vod, "1080p60,1080p,936p60,720p60,720p,best"]
     log.info("baixando %s a partir de %s (%ss)", vod, ini, duracao)
+    if ".m3u8" in vod:  # VOD do Kick (link direto do vídeo)
+        cmd = [ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", str(inicio),
+               "-i", _melhor_variante(vod), "-t", str(duracao), "-c", "copy", "-f", "mpegts", str(destino)]
+    else:
+        cmd = [sys.executable, "-m", "streamlink", "--hls-start-offset", ini, "--hls-duration", str(duracao),
+               "-o", str(destino), "--force", vod, "1080p60,1080p,936p60,720p60,720p,best"]
     subprocess.run(cmd, check=True, timeout=1800)
     if not destino.exists() or destino.stat().st_size < 100_000:
         raise RuntimeError("download do VOD falhou")
 
 
+def kick_vod(url: str) -> tuple[str, float, str | None, str | None]:
+    """kick.com/<canal>/videos/<uuid> -> (link .m3u8, início epoch, título, categoria)."""
+    import requests
+    m = re.search(r"kick\.com/([^/]+)/videos/([0-9a-f-]{36})", url)
+    if not m:
+        raise ValueError("link do Kick esperado: https://kick.com/<canal>/videos/<id>")
+    r = requests.get(f"https://kick.com/api/v2/channels/{m.group(1)}/videos",
+                     headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}, timeout=20)
+    for v in r.json():
+        if (v.get("video") or {}).get("uuid") == m.group(2):
+            ini = datetime.strptime(v["start_time"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            cat = ((v.get("categories") or [{}])[0] or {}).get("name")
+            return v["source"], ini.timestamp(), v.get("session_title"), cat
+    raise RuntimeError("não achei esse vídeo na lista do canal no Kick")
+
+
 def vod_inicio_epoch(vod: str) -> tuple | None:
     """(início do VOD em epoch, título da live, jogo): dá nome ao arquivo com a hora real do momento."""
     import requests
+    if ".m3u8" in vod:
+        return None
     vid = vod.rstrip("/").split("/")[-1].split("?")[0]
     try:
         r = requests.post("https://gql.twitch.tv/gql", headers={"Client-Id": "kimne78kx3ncx6brgo4mv6wki5h1ko"},
@@ -62,7 +102,7 @@ def vod_inicio_epoch(vod: str) -> tuple | None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("vod", help="link do VOD (https://www.twitch.tv/videos/...)")
+    ap.add_argument("vod", help="link do VOD: twitch.tv/videos/..., kick.com/<canal>/videos/<id> ou .m3u8")
     ap.add_argument("--inicio", required=True, help="onde começa no VOD (mm:ss ou hh:mm:ss)")
     ap.add_argument("--duracao", type=int, default=55, help="segundos (máx. 60)")
     ap.add_argument("--canal", default="twitch/alanzoka", help="plataforma/canal (define o canal do YouTube)")
@@ -71,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--postar", action="store_true", help="posta no YouTube")
     ap.add_argument("--privacy", default=None, choices=["public", "unlisted", "private"])
     ap.add_argument("--out", default=str(ROOT / "clips"))
+    ap.add_argument("--vod-inicio", default="", help="hora UTC em que o VOD começou (só p/ link .m3u8)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 
@@ -83,9 +124,15 @@ def main(argv: list[str] | None = None) -> int:
     work = ROOT / "work" / f"vod_{int(time.time())}"
     work.mkdir(parents=True, exist_ok=True)
     src = work / "vod.ts"
-    baixar(args.vod, inicio, dur + 2, src)
+    vod, info = args.vod, None
+    if "kick.com/" in vod and "/videos/" in vod:
+        m3u8, ini_epoch, tit, cat = kick_vod(vod)
+        vod, info = m3u8, (ini_epoch, tit, cat)
+    baixar(vod, inicio, dur + 2, src)
 
-    info = vod_inicio_epoch(args.vod)
+    info = info or vod_inicio_epoch(vod)
+    if not info and args.vod_inicio:
+        info = (datetime.fromisoformat(args.vod_inicio.replace("Z", "+00:00")).timestamp(), None, None)
     base_epoch, titulo_live, categoria = info if info else (time.time(), None, None)
     quando = datetime.fromtimestamp(base_epoch + inicio, timezone.utc)
     out = Path(args.out) / f"{ch.slug}_{quando:%Y%m%d-%H%M%S}.mp4"
