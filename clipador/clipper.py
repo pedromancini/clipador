@@ -86,6 +86,19 @@ def layout_filter(layout: str, fps: int, facecam: Facecam | None = None) -> str:
     )
 
 
+def watermark_filter(workdir: Path, texto: str, entrada: str, saida: str) -> str:
+    """Texto fixo e legível no topo do vídeo, do começo ao fim (ex.: kick.com/allanstag)."""
+    fonte = Path(__file__).resolve().parent.parent / "fonts" / "Anton-Regular.ttf"
+    workdir.mkdir(parents=True, exist_ok=True)
+    if fonte.exists():
+        shutil.copy2(fonte, workdir / "wm.ttf")
+    (workdir / "wm.txt").write_text(texto, encoding="utf-8")
+    font_arg = "fontfile=wm.ttf:" if (workdir / "wm.ttf").exists() else ""
+    return (f"{entrada}drawtext={font_arg}textfile=wm.txt:fontsize=50:fontcolor=white:"
+            f"borderw=3:bordercolor=black@0.85:box=1:boxcolor=black@0.35:boxborderw=14:"
+            f"x=(w-text_w)/2:y=38{saida}")
+
+
 def concat_segments(paths: list[Path], out: Path) -> None:
     """MPEG-TS pode ser concatenado byte a byte (os segmentos vêm do mesmo ffmpeg)."""
     with open(out, "wb") as dst:
@@ -125,6 +138,7 @@ def build_clip(
     facecam_last_good: Facecam | None = None,
     sub_size: int = 80,
     sub_position: str = "middle",
+    watermark: str | None = None,
 ) -> ClipResult:
     """Gera o clip final. `segments` = lista (epoch_inicio, caminho) ordenada."""
     if not segments:
@@ -183,6 +197,8 @@ def build_clip(
             log.warning("legenda falhou (%s); gerando o clip sem legenda", e)
 
     base = layout_filter(layout, fps, facecam)
+    if watermark:
+        base = base[: base.rindex("[v]")] + "[v0];" + watermark_filter(workdir, watermark, "[v0]", "[v]")
     if ass_ok:
         # caminhos relativos (cwd=workdir) evitam o problema de escapar "C:\" no filtro
         vf = base + ";[v]subtitles=subs.ass:fontsdir=fonts[vout]"

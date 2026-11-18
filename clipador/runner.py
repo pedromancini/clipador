@@ -150,6 +150,7 @@ class ChannelRunner:
                              fps=int(self.s["fps"]), with_subtitles=True,
                              whisper_model=self.s["whisper_model"], language=self.s["language"],
                              facecam_auto=self.ch.facecam_auto, facecam_last_good=self._facecam_last_good,
+                             watermark=self.ch.watermark,
                              sub_size=int(self.s["subtitle_size"]),
                              sub_position=self.s["subtitle_position"])
             if res.facecam_refined is not None:
@@ -160,6 +161,7 @@ class ChannelRunner:
             texto = self.copy.make(self.ch.name, res.words, res.transcript, workdir / "audio.wav",
                                    max(0.0, peak.t - t0), peak.top_messages, info.category, info.title,
                                    self.hashtags)
+            texto.titulo = self.ch.titulo_com_tags(texto.titulo)
             yt_line = self._maybe_post_youtube(res, peak, info, texto)
             # resumo na página do job (não depende do Telegram)
             try:

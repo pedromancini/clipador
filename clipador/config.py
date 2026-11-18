@@ -104,6 +104,18 @@ class Channel:
     youtube: bool = True       # false = nunca posta este canal no YouTube (só Telegram)
     youtube_conta: str = ""    # "" = canal principal; "dante" = usa YOUTUBE_REFRESH_TOKEN_DANTE
     hashtags: list[str] | None = None  # hashtags próprias do canal (senão usa settings.hashtags)
+    watermark: str | None = None       # texto fixo no vídeo inteiro (ex.: "kick.com/allanstag")
+    title_tags: list[str] | None = None  # hashtags que TÊM que estar no título (ex.: ["#allanstag"])
+
+    def titulo_com_tags(self, titulo: str, limite: int = 91) -> str:
+        """Garante as hashtags obrigatórias no título (cabendo no limite do YouTube com ' #Shorts')."""
+        faltam = [t for t in (self.title_tags or []) if t.lower() not in titulo.lower()]
+        if not faltam:
+            return titulo
+        sufixo = " " + " ".join(faltam)
+        if len(titulo) + len(sufixo) > limite:
+            titulo = titulo[: limite - len(sufixo) - 1].rstrip() + "…"
+        return titulo + sufixo
 
     @property
     def slug(self) -> str:
@@ -193,6 +205,8 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         youtube=bool(raw.get("youtube", True)),
         youtube_conta=str(raw.get("youtube_conta") or "").strip().lower(),
         hashtags=raw.get("hashtags"),
+        watermark=(str(raw["watermark"]).strip() or None) if raw.get("watermark") else None,
+        title_tags=raw.get("title_tags"),
     )
     _validate_channel(ch, where)
     return ch
@@ -223,6 +237,9 @@ def _validate_channel(ch: Channel, where: str) -> None:
     if ch.hashtags is not None and (not isinstance(ch.hashtags, list)
                                     or not all(isinstance(h, str) for h in ch.hashtags)):
         raise ConfigError(f"{where}: hashtags deve ser uma lista de textos")
+    if ch.title_tags is not None and (not isinstance(ch.title_tags, list)
+                                      or not all(isinstance(h, str) for h in ch.title_tags)):
+        raise ConfigError(f"{where}: title_tags deve ser uma lista de textos")
 
 
 def _validate_settings(s: dict[str, Any]) -> None:

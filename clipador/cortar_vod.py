@@ -93,7 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     res = build_clip([(0.0, src)], 0.0, dur, out, work / "clip", layout=ch.layout, facecam=ch.facecam,
                      fps=int(s["fps"]), with_subtitles=True, whisper_model=s["whisper_model"],
                      language=s["language"], facecam_auto=ch.facecam_auto,
-                     sub_size=int(s["subtitle_size"]), sub_position=s["subtitle_position"])
+                     sub_size=int(s["subtitle_size"]), sub_position=s["subtitle_position"],
+                     watermark=ch.watermark)
     log.info("clip pronto: %s (%.0fs)", out, res.duration)
 
     tags = ch.hashtags or s["hashtags"]
@@ -105,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         wav = work / "clip" / "audio.wav"
         texto = Copywriter().make(ch.name, res.words, res.transcript, wav if wav.exists() else None,
                                   dur / 2, [], categoria, titulo_live, tags)
+    texto.titulo = ch.titulo_com_tags(texto.titulo)
     print(f"TÍTULO: {texto.titulo}\nLEGENDA: {texto.legenda}\nHASHTAGS: {' '.join(texto.hashtags)}", flush=True)
 
     url = None

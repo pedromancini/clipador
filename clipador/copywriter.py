@@ -107,7 +107,8 @@ Contexto:
 Regras:
 - "titulo": até 70 caracteres, em português do Brasil informal, que dê vontade de assistir. Use o nome
   "{canal}". Pode ser uma frase marcante dita no clip (entre aspas) OU uma descrição curiosa do que acontece.
-  NÃO invente nada que não acontece no clip. Sem clickbait mentiroso. No máximo 2 emojis, no final.
+  NÃO invente nada que não acontece no clip (nem ações, nem falas, nem polêmicas). Se não der pra entender
+  o que acontece, descreva só a reação/o jogo de forma simples. Sem clickbait mentiroso. No máximo 2 emojis.
 - "legenda": 1 ou 2 frases curtas pro TikTok (gancho + uma pergunta que puxe comentários). Sem hashtags.
 - "sobre_gta6": true SÓ se o clip fala ou mostra GTA 6 / GTA VI de verdade.
 - "hashtags": 3 a 5 hashtags específicas do conteúdo (jogo, situação). Sem #fyp/#viral (já entram sozinhas).
