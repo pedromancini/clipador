@@ -123,6 +123,7 @@ class Copywriter:
         self._models: list[str] | None = None
         self._lock = threading.Lock()
         self._falhas_seguidas = 0
+        self._pausa_ate = 0.0   # Gemini sobrecarregado: descansa uns minutos e tenta de novo
 
     @property
     def configured(self) -> bool:
@@ -152,6 +153,8 @@ class Copywriter:
             cands.sort(key=lambda n: (-versao(n), "preview" in n, len(n)))
             if cands:
                 escolhidos = [*cands[:4], "gemini-flash-latest"]
+            if "gemini-flash-lite-latest" in nomes:
+                escolhidos.append("gemini-flash-lite-latest")
         except Exception as e:  # noqa: BLE001
             log.warning("não consegui listar os modelos do Gemini: %s", e)
         self._models = escolhidos
@@ -165,16 +168,25 @@ class Copywriter:
             if thinking:
                 cfg["thinkingConfig"] = {"thinkingBudget": 0}
             return requests.post(f"{API}/models/{model}:generateContent", params={"key": self.api_key},
-                                 json={"contents": [{"parts": parts}], "generationConfig": cfg}, timeout=60)
+                                 json={"contents": [{"parts": parts}], "generationConfig": cfg}, timeout=35)
 
         with self._lock:
             modelos = self._resolve_models()
         ultimo = ""
+        prazo = time.monotonic() + 120   # não segura o clip mais que ~2 min
         for i, m in enumerate(list(modelos)):
+            r = None
             for tentativa in range(2):
-                r = chamar(m, thinking=True)
-                if r.status_code == 400:
-                    r = chamar(m, thinking=False)  # alguns modelos não aceitam thinkingConfig
+                if time.monotonic() > prazo:
+                    raise RuntimeError(f"Gemini lento demais agora ({ultimo})")
+                try:
+                    r = chamar(m, thinking=True)
+                    if r.status_code == 400:
+                        r = chamar(m, thinking=False)  # alguns modelos não aceitam thinkingConfig
+                except requests.RequestException as e:
+                    ultimo = f"{m}: {type(e).__name__}"
+                    r = None
+                    break  # travou: tenta o próximo modelo
                 if r.status_code == 200:
                     with self._lock:
                         self._models = [m, *[x for x in modelos if x != m]]
@@ -182,10 +194,10 @@ class Copywriter:
                     return "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", []))
                 ultimo = f"{m}: {r.status_code} {r.text[:200]}"
                 if r.status_code == 429 or r.status_code >= 500:
-                    time.sleep(4 * (tentativa + 1))
+                    time.sleep(3 * (tentativa + 1))
                     continue
                 break
-            if r.status_code == 404 and i == 0 and not self.model_env:
+            if r is not None and r.status_code == 404 and i == 0 and not self.model_env:
                 with self._lock:
                     modelos = self._resolve_models(refresh=True)
         raise RuntimeError(ultimo or "Gemini não respondeu")
@@ -225,6 +237,8 @@ class Copywriter:
              base_tags: list[str]) -> ClipCopy:
         """Texto do post: Gemini se configurado, senão (ou se falhar) o plano B local."""
         base = [t for t in base_tags if t.lower() not in ("#gta6", "#gta", "#gtavi")]
+        if self.configured and self._falhas_seguidas >= 5 and time.time() >= self._pausa_ate:
+            self._falhas_seguidas = 4   # passou a pausa: mais uma chance
         if self.configured and self._falhas_seguidas < 5:
             try:
                 c = self.gemini_copy(channel, audio_path, transcript, peak_offset, top_messages, category,
@@ -234,6 +248,9 @@ class Copywriter:
                 return c
             except Exception as e:  # noqa: BLE001
                 self._falhas_seguidas += 1
+                if self._falhas_seguidas >= 5:
+                    self._pausa_ate = time.time() + 600
+                    log.warning("Gemini falhou 5x seguidas; tento de novo em 10 min")
                 log.warning("Gemini falhou (%s); usando título local", str(e)[:200])
         return local_copy(channel, words, peak_offset, top_messages, category, stream_title, base,
                           seed=time.time() // 60)
