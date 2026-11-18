@@ -1,0 +1,89 @@
+# Corta um momento de um VOD da Twitch (que o monitoramento ao vivo não pegou) e posta no YouTube.
+# Disparo manual: Actions -> "cortar VOD" -> Run workflow.
+name: cortar VOD
+
+on:
+  workflow_dispatch:
+    inputs:
+      vod:
+        description: "Link do VOD (https://www.twitch.tv/videos/...)"
+        required: true
+      inicio:
+        description: "Onde começa no VOD (mm:ss ou hh:mm:ss)"
+        required: true
+      duracao:
+        description: "Duração em segundos (máx. 60)"
+        default: "55"
+      canal:
+        description: "plataforma/canal (define em qual canal do YouTube posta)"
+        default: "twitch/alanzoka"
+      titulo:
+        description: "Título (vazio = a IA escreve)"
+        default: ""
+      legenda:
+        description: "Legenda / gancho (opcional)"
+        default: ""
+      postar:
+        description: "Postar no YouTube"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  cortar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      PYTHONUNBUFFERED: "1"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      CLIPADOR_MODEL_DIR: /home/runner/.cache/clipador/whisper
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+      YOUTUBE_REFRESH_TOKEN_DANTE: ${{ secrets.YOUTUBE_REFRESH_TOKEN_DANTE }}   # canal @dantecllips
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependências
+        run: |
+          pip install -r requirements.txt
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+
+      - name: Cache do modelo Whisper
+        uses: actions/cache@v6
+        with:
+          path: /home/runner/.cache/clipador/whisper
+          key: whisper-${{ hashFiles('channels.json') }}
+          restore-keys: whisper-
+
+      - name: Cortar (e postar)
+        env:
+          VOD: ${{ inputs.vod }}
+          INICIO: ${{ inputs.inicio }}
+          DURACAO: ${{ inputs.duracao }}
+          CANAL: ${{ inputs.canal }}
+          TITULO: ${{ inputs.titulo }}
+          LEGENDA: ${{ inputs.legenda }}
+          POSTAR: ${{ inputs.postar && '--postar' || '' }}
+        run: |
+          python -m clipador.cortar_vod "$VOD" --inicio "$INICIO" --duracao "$DURACAO" --canal "$CANAL" \
+            --titulo "$TITULO" --legenda "$LEGENDA" $POSTAR
+
+      - name: Guardar o clip (artifact, 3 dias; o baixador do TikTok pega daqui)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: clips-vod-${{ github.run_id }}
+          path: |
+            clips/*.mp4
+            clips/*.json
+          retention-days: 3
+          if-no-files-found: ignore
