@@ -86,16 +86,18 @@ def main(argv: list[str] | None = None) -> int:
     if bruto.strip().lower() != "auto" and not bruto.lstrip().startswith("["):
         bruto = Path(bruto).read_text(encoding="utf-8")   # caminho de arquivo
     if bruto.strip().lower() == "auto":
-        lista = lista_auto(Path(args.dir), args.max)
+        lista = lista_auto(Path(args.dir))   # o --max conta só o que for postado de fato
         print(f"auto: {len(lista)} clip(s) ainda não postados no YouTube", flush=True)
     else:
         lista = json.loads(bruto)
     settings = load_config().settings
     contas: dict[str, YouTube] = {}
+    ja_postados: dict[str, set[str]] = {}
 
     pasta = Path(args.dir)
     falhas = 0
     fim = time.monotonic() + args.prazo * 60
+    postados = 0
     for i, item in enumerate(lista):
         video = pasta / item["arquivo"]
         if not video.exists():
@@ -111,10 +113,21 @@ def main(argv: list[str] | None = None) -> int:
             falhas += 1
             continue
         meta, platform, name = metadados(item, settings)
+        if conta not in ja_postados:
+            try:
+                ja_postados[conta] = yt.titulos_postados()
+            except Exception as e:  # noqa: BLE001
+                log.warning("não consegui ler os títulos já postados: %s", e)
+                ja_postados[conta] = set()
+        if meta["snippet"]["title"].replace("#Shorts", "").strip().lower() in ja_postados[conta]:
+            log.info("já está no canal, pulando: %s", meta["snippet"]["title"])
+            continue
         while True:
             try:
                 url = yt.upload(video, meta, platform, name)
                 print(f"▶️ {i + 1}/{len(lista)} {meta['snippet']['title']}  {url}", flush=True)
+                ja_postados[conta].add(meta["snippet"]["title"].replace("#Shorts", "").strip().lower())
+                postados += 1
                 break
             except YouTubeLimitError as e:
                 if args.esperar_limite and time.monotonic() + 1800 < fim:
@@ -136,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
                 break
         if url is None:
             continue
+        if args.max and postados >= args.max:
+            break
         if i < len(lista) - 1 and args.intervalo > 0:
             log.info("próximo em %.0f min", args.intervalo)
             time.sleep(args.intervalo * 60)

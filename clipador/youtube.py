@@ -232,6 +232,29 @@ class YouTube:
                 break
         return sorted(tempos)
 
+    def titulos_postados(self, paginas: int = 4) -> set[str]:
+        """Títulos dos últimos uploads do canal (sem o ' #Shorts'), pra não repostar o mesmo clip."""
+        if not self._uploads_playlist:
+            d = self._get("channels", {"part": "contentDetails", "mine": "true"})
+            if not d.get("items"):
+                raise YouTubeError("a conta autorizada não tem canal no YouTube")
+            self._uploads_playlist = d["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+        titulos: set[str] = set()
+        token = None
+        for _ in range(paginas):
+            params = {"part": "snippet", "playlistId": self._uploads_playlist, "maxResults": 50}
+            if token:
+                params["pageToken"] = token
+            d = self._get("playlistItems", params)
+            for it in d.get("items", []):
+                t = (it.get("snippet", {}).get("title") or "").replace("#Shorts", "").strip().lower()
+                if t:
+                    titulos.add(t)
+            token = d.get("nextPageToken")
+            if not token:
+                break
+        return titulos
+
     def stats(self, platform: str, name: str, now: float | None = None) -> PostStats:
         """Posts de hoje / da última hora / minutos desde o último (consulta o YouTube 1x por job)."""
         now = time.time() if now is None else now

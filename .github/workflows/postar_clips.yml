@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: "ID da execução do clipador que gerou os clips (artifact ainda válido, 3 dias)"
+        description: "ID(s) da(s) execução(ões) que geraram os clips, separados por vírgula (artifacts valem 3 dias)"
         required: true
       lista:
         description: 'auto (os não postados, mais virais primeiro) ou JSON: [{"arquivo": "...mp4", "titulo": "...", "legenda": "...", "hashtags": ["#x"]}]'
@@ -56,9 +56,12 @@ jobs:
         run: |
           # pega os artifacts dessa execução em qualquer tentativa (re-run cancelado não esconde o clip)
           mkdir -p baixados clips
-          for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100"                         -q ".artifacts[] | select(.workflow_run.id == $RUN_ID and (.expired | not)) | .id"); do
-            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "baixados/$id.zip"
-            unzip -o -q "baixados/$id.zip" -d baixados
+          # aceita vários IDs separados por espaço ou vírgula
+          for rid in $(echo "$RUN_ID" | tr ',' ' '); do
+            for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100"                           -q ".artifacts[] | select(.workflow_run.id == $rid and (.expired | not)) | .id"); do
+              gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "baixados/$id.zip"
+              unzip -o -q "baixados/$id.zip" -d baixados
+            done
           done
           find baixados \( -name '*.mp4' -o -name '*.json' \) -exec mv {} clips/ \;
           ls clips
