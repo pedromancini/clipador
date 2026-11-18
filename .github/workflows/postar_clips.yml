@@ -15,10 +15,14 @@ on:
       intervalo:
         description: "Minutos entre um post e outro"
         default: "20"
+      esperar_limite:
+        description: "Se o canal estiver no limite de envios, esperar liberar (e se re-disparar se precisar)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
-  actions: read
+  actions: write   # para se re-disparar com o que faltou postar
 
 jobs:
   postar:
@@ -55,6 +59,15 @@ jobs:
         env:
           LISTA: ${{ inputs.lista }}
           INTERVALO: ${{ inputs.intervalo }}
+          ESPERAR: ${{ inputs.esperar_limite && '--esperar-limite' || '' }}
         run: |
           printf '%s' "$LISTA" > lista.json
-          python -m clipador.postar_lote --dir clips --lista lista.json --intervalo "$INTERVALO"
+          python -m clipador.postar_lote --dir clips --lista lista.json --intervalo "$INTERVALO" $ESPERAR
+
+      - name: Faltou postar? Dispara de novo com o resto
+        if: hashFiles('restantes.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          INTERVALO: ${{ inputs.intervalo }}
+        run: gh workflow run postar_clips.yml --ref ${{ github.ref_name }} -f run_id="$RUN_ID" -f intervalo="$INTERVALO" -f esperar_limite=true -f lista="$(cat restantes.json)"

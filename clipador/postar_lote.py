@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from .config import load_config
-from .youtube import YouTube, build_metadata, marker
+from .youtube import YouTube, YouTubeLimitError, build_metadata, marker
 
 log = logging.getLogger("clipador.postar_lote")
 
@@ -56,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dir", default="clips", help="pasta com os .mp4")
     ap.add_argument("--lista", required=True, help="arquivo JSON com a lista (ou o próprio JSON)")
     ap.add_argument("--intervalo", type=float, default=20, help="minutos entre um post e outro")
+    ap.add_argument("--esperar-limite", action="store_true",
+                    help="se o canal estiver no limite de envios, espera e tenta de novo a cada 30 min")
+    ap.add_argument("--prazo", type=float, default=330, help="minutos máximos desta execução")
+    ap.add_argument("--restantes", default="restantes.json", help="onde salvar o que não deu tempo de postar")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 
@@ -68,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
 
     pasta = Path(args.dir)
     falhas = 0
+    fim = time.monotonic() + args.prazo * 60
     for i, item in enumerate(lista):
         video = pasta / item["arquivo"]
         if not video.exists():
@@ -82,15 +87,31 @@ def main(argv: list[str] | None = None) -> int:
             log.error("%s: faltam os secrets do YouTube da conta %s", item["arquivo"], yt.conta)
             falhas += 1
             continue
-        try:
-            meta, platform, name = metadados(item, settings)
-            url = yt.upload(video, meta, platform, name)
-            print(f"▶️ {i + 1}/{len(lista)} {meta['snippet']['title']}  {url}", flush=True)
-        except Exception as e:  # noqa: BLE001
-            log.error("falhou %s: %s", item["arquivo"], e)
-            falhas += 1
-            if "cota" in str(e) or "limite de envios" in str(e):
+        meta, platform, name = metadados(item, settings)
+        while True:
+            try:
+                url = yt.upload(video, meta, platform, name)
+                print(f"▶️ {i + 1}/{len(lista)} {meta['snippet']['title']}  {url}", flush=True)
                 break
+            except YouTubeLimitError as e:
+                if args.esperar_limite and time.monotonic() + 1800 < fim:
+                    log.warning("%s; tento de novo em 30 min", e)
+                    time.sleep(1800)
+                    continue
+                log.error("falhou %s: %s", item["arquivo"], e)
+                if args.esperar_limite:  # acabou o tempo desta execução: guarda o resto pra próxima
+                    Path(args.restantes).write_text(json.dumps(lista[i:], ensure_ascii=False), encoding="utf-8")
+                    print(f"⏸️ canal no limite; {len(lista) - i} clip(s) ficam pra próxima execução", flush=True)
+                    return 0
+                return 1
+            except Exception as e:  # noqa: BLE001
+                log.error("falhou %s: %s", item["arquivo"], e)
+                falhas += 1
+                url = None
+                if "cota" in str(e):
+                    return 1
+                break
+        if url is None:
             continue
         if i < len(lista) - 1 and args.intervalo > 0:
             log.info("próximo em %.0f min", args.intervalo)
