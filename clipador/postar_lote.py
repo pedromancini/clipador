@@ -54,8 +54,7 @@ def _norm(t: str) -> str:
 def ja_no_canal(item: dict, titulo_final: str, postados: set[str]) -> bool:
     """O clip já está no canal? Compara título e legenda (o usuário pode ter postado à mão com outro título)."""
     from difflib import SequenceMatcher
-    candidatos = [_norm(titulo_final), _norm(item.get("titulo", "")), _norm((item.get("legenda") or "").split("
-")[0])]
+    candidatos = [_norm(titulo_final), _norm(item.get("titulo", "")), _norm((item.get("legenda") or "").split(chr(10))[0])]
     candidatos = [c for c in candidatos if len(c) >= 12]
     for p in postados:
         pn = _norm(p)
