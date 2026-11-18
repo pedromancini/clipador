@@ -94,9 +94,9 @@ def watermark_filter(workdir: Path, texto: str, entrada: str, saida: str) -> str
         shutil.copy2(fonte, workdir / "wm.ttf")
     (workdir / "wm.txt").write_text(texto, encoding="utf-8")
     font_arg = "fontfile=wm.ttf:" if (workdir / "wm.ttf").exists() else ""
-    return (f"{entrada}drawtext={font_arg}textfile=wm.txt:fontsize=50:fontcolor=white:"
+    return (f"{entrada}drawtext={font_arg}textfile=wm.txt:fontsize=46:fontcolor=white:"
             f"borderw=3:bordercolor=black@0.85:box=1:boxcolor=black@0.35:boxborderw=14:"
-            f"x=(w-text_w)/2:y=38{saida}")
+            f"x=w-text_w-44:y=168{saida}")  # canto direito, abaixo da barra de busca do Shorts
 
 
 def concat_segments(paths: list[Path], out: Path) -> None:
