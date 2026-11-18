@@ -102,6 +102,8 @@ class Channel:
     facecam_auto: bool = False  # "facecam": "auto" -> acha a câmera sozinho em cada clip
     min_msgs: float | None = None
     youtube: bool = True       # false = nunca posta este canal no YouTube (só Telegram)
+    youtube_conta: str = ""    # "" = canal principal; "dante" = usa YOUTUBE_REFRESH_TOKEN_DANTE
+    hashtags: list[str] | None = None  # hashtags próprias do canal (senão usa settings.hashtags)
 
     @property
     def slug(self) -> str:
@@ -189,6 +191,8 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         facecam_auto=isinstance(fc, str) and fc.strip().lower() == "auto",
         min_msgs=raw.get("min_msgs"),
         youtube=bool(raw.get("youtube", True)),
+        youtube_conta=str(raw.get("youtube_conta") or "").strip().lower(),
+        hashtags=raw.get("hashtags"),
     )
     _validate_channel(ch, where)
     return ch
@@ -212,6 +216,13 @@ def _validate_channel(ch: Channel, where: str) -> None:
             raise ConfigError(f"{where}: kick_chatroom_id deve ser um número") from None
     if ch.min_msgs is not None and (not isinstance(ch.min_msgs, (int, float)) or ch.min_msgs <= 0):
         raise ConfigError(f"{where}: min_msgs deve ser um número > 0")
+    if ch.youtube_conta in ("principal", "padrao", "padrão", "default"):
+        ch.youtube_conta = ""
+    if ch.youtube_conta and not re.fullmatch(r"[a-z0-9_]{1,30}", ch.youtube_conta):
+        raise ConfigError(f"{where}: youtube_conta só pode ter letras, números e _ (veio {ch.youtube_conta!r})")
+    if ch.hashtags is not None and (not isinstance(ch.hashtags, list)
+                                    or not all(isinstance(h, str) for h in ch.hashtags)):
+        raise ConfigError(f"{where}: hashtags deve ser uma lista de textos")
 
 
 def _validate_settings(s: dict[str, Any]) -> None:

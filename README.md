@@ -88,6 +88,7 @@ No repositório: **Settings → Secrets and variables → Actions → New reposi
 | `TELEGRAM_BOT_TOKEN` | *(opcional)* o token do BotFather |
 | `TELEGRAM_CHAT_ID` | *(opcional)* o seu chat_id |
 | `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` / `YOUTUBE_REFRESH_TOKEN` | *(opcional)* veja o passo 7 |
+| `YOUTUBE_REFRESH_TOKEN_DANTE` | *(opcional)* token do 2º canal do YouTube (passo 7d) |
 | `GEMINI_API_KEY` | *(recomendado)* chave grátis em [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
 > Os secrets ficam escondidos mesmo com o repositório público. Nunca coloque o token direto no código.
@@ -227,6 +228,22 @@ No fim, o terminal mostra 3 valores.
 | `category_id` | `20` = Jogos, `24` = Entretenimento |
 
 Quer que um canal nunca vá pro YouTube (só Telegram)? Coloque `"youtube": false` nele.
+
+**d) Um streamer em outro canal do YouTube**
+
+Cada streamer pode postar num canal diferente. Ex.: alanzoka vai pro canal principal (de GTA) e allanstag vai
+para outro canal:
+
+1. Rode a autorização de novo, dando um nome pra conta, e escolha o **outro** canal na tela do Google:
+   ```bash
+   python -m clipador.youtube_auth client_secret.json dante
+   ```
+2. Crie o secret que ele mostrar (`YOUTUBE_REFRESH_TOKEN_DANTE`). O client id/secret são os mesmos do principal.
+3. No canal do `channels.json`, coloque `"youtube_conta": "dante"` (e, se quiser, `"hashtags"` próprias dele).
+
+Sem o secret dessa conta, os clips desse streamer **não são postados**: eles nunca vão parar no canal principal.
+Para um nome novo (ex.: `"youtube_conta": "outro"`) é preciso também adicionar a linha
+`YOUTUBE_REFRESH_TOKEN_OUTRO: ${{ secrets.YOUTUBE_REFRESH_TOKEN_OUTRO }}` no `env` dos workflows.
 
 Os clips que não passam no filtro continuam chegando no Telegram, com o motivo (ex.: `⏭️ YouTube: hype 3.2x < 4x`).
 

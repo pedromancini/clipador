@@ -2,6 +2,9 @@
 
 Secrets / variáveis de ambiente (gerados uma vez com `python -m clipador.youtube_auth`):
     YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN
+Outros canais do YouTube ("youtube_conta": "dante" no channels.json): YOUTUBE_REFRESH_TOKEN_DANTE
+(e, se for outro app do Google, YOUTUBE_CLIENT_ID_DANTE / YOUTUBE_CLIENT_SECRET_DANTE).
+Um canal com conta própria NUNCA cai no canal principal: sem o token dele, simplesmente não posta.
 
 Só posta os picos mais fortes (settings.youtube.min_hype_ratio), num ritmo de posts_per_hour por hora
 (espaçados por min_minutes_between_posts); quando o chat explode (extreme_hype_ratio) libera um post
@@ -127,6 +130,7 @@ class YouTube:
         self.refresh_token = (refresh_token or "").strip()
         self.configured = bool(self.client_id and self.client_secret and self.refresh_token)
         self.timezone = timezone
+        self.conta = "principal"
         self._access_token: str | None = None
         self._token_exp = 0.0
         self._uploads_playlist: str | None = None
@@ -134,9 +138,15 @@ class YouTube:
         self._lock = threading.Lock()
 
     @classmethod
-    def from_env(cls, timezone: str = "America/Sao_Paulo") -> "YouTube":
-        return cls(os.environ.get("YOUTUBE_CLIENT_ID"), os.environ.get("YOUTUBE_CLIENT_SECRET"),
-                   os.environ.get("YOUTUBE_REFRESH_TOKEN"), timezone)
+    def from_env(cls, timezone: str = "America/Sao_Paulo", conta: str = "") -> "YouTube":
+        """conta "" = canal principal; "dante" = YOUTUBE_REFRESH_TOKEN_DANTE (sem cair no principal)."""
+        suf = f"_{conta.upper()}" if conta else ""
+        env = os.environ.get
+        yt = cls(env(f"YOUTUBE_CLIENT_ID{suf}") or env("YOUTUBE_CLIENT_ID"),
+                 env(f"YOUTUBE_CLIENT_SECRET{suf}") or env("YOUTUBE_CLIENT_SECRET"),
+                 env(f"YOUTUBE_REFRESH_TOKEN{suf}"), timezone)
+        yt.conta = conta or "principal"
+        return yt
 
     # ---------------------------------------------------------------- auth
     def _token(self) -> str:

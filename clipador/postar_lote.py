@@ -34,7 +34,8 @@ def metadados(item: dict, settings: dict) -> tuple[dict, str, str]:
     platform, name = m.group(1), m.group(2).lower()
     ch = load_config().channel_or_default(platform, name)
     ys = settings["youtube"]
-    tags = item.get("hashtags") or [f"#{name}"] + [t for t in settings.get("hashtags", []) if "gta" not in t]
+    tags = item.get("hashtags") or [f"#{name}"] + [t for t in (ch.hashtags or settings.get("hashtags", []))
+                                                  if "gta" not in t]
     legenda = (item.get("legenda") or "").strip()
     meta = build_metadata(item["titulo"], ch.name, ch.platform_label, ch.url, tags, platform,
                           ys["category_id"], item.get("privacy") or ys["privacy"], ys["made_for_kids"],
@@ -42,6 +43,12 @@ def metadados(item: dict, settings: dict) -> tuple[dict, str, str]:
     desc = meta["snippet"]["description"]
     meta["snippet"]["description"] = desc.replace(marker(platform, ch.name), marker("extra", ch.name))
     return meta, platform, name
+
+
+def conta_do(item: dict) -> str:
+    """Conta do YouTube do canal do clip ("" = canal principal)."""
+    m = _NOME_RE.match(item["arquivo"])
+    return load_config().channel_or_default(m.group(1), m.group(2).lower()).youtube_conta if m else ""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,10 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         bruto = Path(bruto).read_text(encoding="utf-8")
     lista = json.loads(bruto)
     settings = load_config().settings
-    yt = YouTube.from_env(settings.get("timezone", "America/Sao_Paulo"))
-    if not yt.configured:
-        log.error("faltam os secrets do YouTube (YOUTUBE_CLIENT_ID / _SECRET / _REFRESH_TOKEN)")
-        return 1
+    contas: dict[str, YouTube] = {}
 
     pasta = Path(args.dir)
     falhas = 0
@@ -68,6 +72,14 @@ def main(argv: list[str] | None = None) -> int:
         video = pasta / item["arquivo"]
         if not video.exists():
             log.error("não achei %s, pulando", video)
+            falhas += 1
+            continue
+        conta = conta_do(item)
+        if conta not in contas:
+            contas[conta] = YouTube.from_env(settings.get("timezone", "America/Sao_Paulo"), conta)
+        yt = contas[conta]
+        if not yt.configured:
+            log.error("%s: faltam os secrets do YouTube da conta %s", item["arquivo"], yt.conta)
             falhas += 1
             continue
         try:

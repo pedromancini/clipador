@@ -57,7 +57,8 @@ class ChannelRunner:
         self.once = once
         self.max_minutes = max_minutes or self.s["max_runtime_minutes"]
         self.yt_settings = self.s.get("youtube") or dict(DEFAULT_YOUTUBE)
-        self.yt = youtube or YouTube.from_env(self.s["timezone"])
+        self.yt = youtube or YouTube.from_env(self.s["timezone"], channel.youtube_conta)
+        self.hashtags = channel.hashtags or self.s["hashtags"]
         self.copy = Copywriter()        # título/legenda com IA (GEMINI_API_KEY) ou plano B local
         self.post_forced = post_forced   # --post-youtube: posta até o clip de teste (--once)
 
@@ -156,7 +157,7 @@ class ChannelRunner:
             # título + legenda + hashtags (IA ouvindo o áudio do clip, ou plano B local)
             texto = self.copy.make(self.ch.name, res.words, res.transcript, workdir / "audio.wav",
                                    max(0.0, peak.t - t0), peak.top_messages, info.category, info.title,
-                                   self.s["hashtags"])
+                                   self.hashtags)
             yt_line = self._maybe_post_youtube(res, peak, info, texto)
             # resumo na página do job (não depende do Telegram)
             try:
@@ -166,7 +167,7 @@ class ChannelRunner:
                 log.warning("não consegui escrever o resumo: %s", e)
             self._write_sidecar(out, peak, res, info, texto, yt_line)
             cap = build_caption(self.ch.name, self.ch.platform_label, peak, res.transcript, info.title,
-                                info.category, self.s["hashtags"], self.s["timezone"], youtube_line=yt_line)
+                                info.category, self.hashtags, self.s["timezone"], youtube_line=yt_line)
             self.tg.send_video(res.path, cap, duration=res.duration)
             with self._clip_lock:
                 self.clips_ok += 1

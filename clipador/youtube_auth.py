@@ -1,6 +1,7 @@
 """Autoriza o clipador a postar no SEU canal do YouTube (rodar UMA vez, no seu PC).
 
-    python -m clipador.youtube_auth caminho/do/client_secret.json
+    python -m clipador.youtube_auth caminho/do/client_secret.json            (canal principal)
+    python -m clipador.youtube_auth caminho/do/client_secret.json dante      (outro canal: conta "dante")
 
 1. Abre o navegador na tela de login do Google.
 2. Você escolhe a conta/canal do YouTube e autoriza (o Google avisa "app não verificado":
@@ -41,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
     if not argv:
         print(__doc__)
         return 2
+    conta = argv[1].strip().lower() if len(argv) > 1 else ""
+    suf = f"_{conta.upper()}" if conta else ""
     with open(argv[0], encoding="utf-8") as f:
         raw = json.load(f)
     cfg = raw.get("installed") or raw.get("web")
@@ -112,10 +115,15 @@ def main(argv: list[str] | None = None) -> int:
         nome = f"(não consegui conferir: {e})"
 
     print("\n✅ Autorizado! Canal do YouTube:", nome)
-    print("\nColoque estes 3 secrets no GitHub (Settings > Secrets and variables > Actions):\n")
-    print(f"  YOUTUBE_CLIENT_ID      = {client_id}")
-    print(f"  YOUTUBE_CLIENT_SECRET  = {client_secret}")
-    print(f"  YOUTUBE_REFRESH_TOKEN  = {refresh}")
+    if conta:
+        print("\nColoque este secret no GitHub (Settings > Secrets and variables > Actions):\n")
+        print(f"  YOUTUBE_REFRESH_TOKEN{suf}  = {refresh}")
+        print("\n(usa o mesmo YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET do canal principal)")
+    else:
+        print("\nColoque estes 3 secrets no GitHub (Settings > Secrets and variables > Actions):\n")
+        print(f"  YOUTUBE_CLIENT_ID      = {client_id}")
+        print(f"  YOUTUBE_CLIENT_SECRET  = {client_secret}")
+        print(f"  YOUTUBE_REFRESH_TOKEN  = {refresh}")
     print("\nNão compartilhe esses valores com ninguém (dão acesso pra postar no seu canal).")
     return 0
 

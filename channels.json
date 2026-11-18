@@ -50,6 +50,15 @@
       "layout": "facecam",
       "facecam": "auto",
       "enabled": true
+    },
+    {
+      "url": "https://kick.com/allanstag",
+      "kick_chatroom_id": 53738549,
+      "layout": "facecam",
+      "facecam": "auto",
+      "youtube_conta": "dante",
+      "hashtags": ["#allanstag", "#cortes", "#kick", "#clips", "#fyp", "#viral"],
+      "enabled": true
     }
   ]
 }
