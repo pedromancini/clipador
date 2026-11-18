@@ -45,6 +45,28 @@ def metadados(item: dict, settings: dict) -> tuple[dict, str, str]:
     return meta, platform, name
 
 
+def _norm(t: str) -> str:
+    t = re.sub(r"#\w+", " ", (t or "").lower())
+    t = re.sub(r"[^\w\s]", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def ja_no_canal(item: dict, titulo_final: str, postados: set[str]) -> bool:
+    """O clip já está no canal? Compara título e legenda (o usuário pode ter postado à mão com outro título)."""
+    from difflib import SequenceMatcher
+    candidatos = [_norm(titulo_final), _norm(item.get("titulo", "")), _norm((item.get("legenda") or "").split("
+")[0])]
+    candidatos = [c for c in candidatos if len(c) >= 12]
+    for p in postados:
+        pn = _norm(p)
+        if len(pn) < 8:
+            continue
+        for c in candidatos:
+            if c == pn or c in pn or pn in c or SequenceMatcher(None, c, pn).ratio() >= 0.72:
+                return True
+    return False
+
+
 def lista_auto(pasta: Path, maximo: int = 0) -> list[dict]:
     """Clips da pasta que ainda não foram pro YouTube (pelo .json de cada um), do mais viral pro menos."""
     itens = []
@@ -119,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as e:  # noqa: BLE001
                 log.warning("não consegui ler os títulos já postados: %s", e)
                 ja_postados[conta] = set()
-        if meta["snippet"]["title"].replace("#Shorts", "").strip().lower() in ja_postados[conta]:
+        if ja_no_canal(item, meta["snippet"]["title"].replace("#Shorts", ""), ja_postados[conta]):
             log.info("já está no canal, pulando: %s", meta["snippet"]["title"])
             continue
         while True:
