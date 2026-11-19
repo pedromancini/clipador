@@ -55,6 +55,7 @@
       "url": "https://www.twitch.tv/alanzoka",
       "layout": "facecam",
       "facecam": "auto",
+      "so_gameplay": true,
       "enabled": true
     },
     {
@@ -71,17 +72,17 @@
     },
 
     {"url": "https://kick.com/bistecone", "kick_chatroom_id": 75508586, "layout": "facecam",
-     "facecam": {"x": 0.792, "y": 0.228, "w": 0.204, "h": 0.232}, "so_gta": true, "enabled": true},
+     "facecam": {"x": 0.792, "y": 0.228, "w": 0.204, "h": 0.232}, "so_gta": true, "so_gameplay": true, "enabled": true},
     {"url": "https://kick.com/gabepeixe", "kick_chatroom_id": 63065813, "layout": "facecam", "facecam": "auto",
-     "so_gta": true, "enabled": true},
+     "so_gta": true, "so_gameplay": true, "enabled": true},
     {"url": "https://kick.com/davyjones", "kick_chatroom_id": 137985807, "layout": "facecam", "facecam": "auto",
-     "so_gta": true, "enabled": true},
-    {"url": "https://kick.com/coringa", "kick_chatroom_id": 4113274, "layout": "facecam", "facecam": "auto",
-     "so_gta": true, "enabled": true},
+     "so_gta": true, "so_gameplay": true, "enabled": true},
+    {"url": "https://kick.com/coringa", "kick_chatroom_id": 4113274, "layout": "blur",
+     "so_gta": true, "so_gameplay": true, "enabled": true},
     {"url": "https://kick.com/kosky", "kick_chatroom_id": 2708770, "layout": "facecam", "facecam": "auto",
-     "so_gta": true, "enabled": true},
-    {"url": "https://www.twitch.tv/cellbit", "layout": "facecam", "facecam": "auto", "so_gta": true, "enabled": true},
-    {"url": "https://www.twitch.tv/facada", "layout": "facecam", "facecam": "auto", "so_gta": true, "enabled": true},
-    {"url": "https://www.twitch.tv/ricfazeres", "layout": "facecam", "facecam": "auto", "so_gta": true, "enabled": true}
+     "so_gta": true, "so_gameplay": true, "enabled": true},
+    {"url": "https://www.twitch.tv/cellbit", "layout": "facecam", "facecam": "auto", "so_gta": true, "so_gameplay": true, "enabled": true},
+    {"url": "https://www.twitch.tv/facada", "layout": "facecam", "facecam": "auto", "so_gta": true, "so_gameplay": true, "enabled": true},
+    {"url": "https://www.twitch.tv/ricfazeres", "layout": "facecam", "facecam": "auto", "so_gta": true, "so_gameplay": true, "enabled": true}
   ]
 }

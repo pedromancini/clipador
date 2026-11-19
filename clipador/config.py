@@ -119,6 +119,7 @@ class Channel:
     title_tags: list[str] | None = None  # hashtags que TÊM que estar no título (ex.: ["#allanstag"])
     so_gta: bool = False       # true = só posta no YouTube os clips de GTA (streamer que joga outras coisas)
     horizontal: bool = True    # false = nunca posta a versão horizontal deste streamer
+    so_gameplay: bool = False  # true = descarta clip que não é tela de jogo (IRL, evento, só conversa)
 
     def limpar_hashtags(self, tags: list[str]) -> list[str]:
         """Tira hashtag da OUTRA plataforma (ex.: #clipsdetwitch num streamer do Kick)."""
@@ -227,6 +228,7 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         title_tags=raw.get("title_tags"),
         so_gta=bool(raw.get("so_gta", False)),
         horizontal=bool(raw.get("horizontal", True)),
+        so_gameplay=bool(raw.get("so_gameplay", False)),
     )
     _validate_channel(ch, where)
     return ch

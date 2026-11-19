@@ -38,6 +38,25 @@ from .youtube import YouTube, YouTubeLimitError, build_metadata, conta_teto, dec
 log = logging.getLogger("clipador.runner")
 
 
+def quadros_do_clip(video: Path, duracao: float, workdir: Path) -> list[Path]:
+    """2 quadros do clip (1/3 e 2/3) pra IA ver se é gameplay ou câmera da vida real."""
+    from .recorder import ffmpeg_bin
+    import subprocess
+    out = []
+    for i, frac in enumerate((0.33, 0.66)):
+        p = workdir / f"quadro{i}.jpg"
+        try:
+            subprocess.run([ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                            "-ss", f"{max(0.0, duracao * frac):.2f}", "-i", str(video), "-frames:v", "1",
+                            "-vf", "scale=540:-2", "-q:v", "4", str(p)], check=True, timeout=60,
+                           capture_output=True)
+            if p.exists():
+                out.append(p)
+        except Exception as e:  # noqa: BLE001
+            log.warning("não consegui tirar quadro do clip: %s", e)
+    return out
+
+
 def _norm_titulo(t: str) -> str:
     t = re.sub(r"#\w+", " ", (t or "").lower())
     return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", t)).strip()
@@ -183,9 +202,14 @@ class ChannelRunner:
             info = self.info or StreamInfo(live=True)
             # título + legenda + hashtags (IA ouvindo o áudio do clip, ou plano B local)
             evitar = self._titulos_evitar()
+            quadros = quadros_do_clip(res.path, res.duration, workdir)
             texto = self.copy.make(self.ch.name, res.words, res.transcript, workdir / "audio.wav",
                                    max(0.0, peak.t - t0), peak.top_messages, info.category, info.title,
-                                   self.hashtags, evitar=evitar)
+                                   self.hashtags, evitar=evitar, images=quadros)
+            if self.ch.so_gameplay and texto.gameplay is False and not peak.forced:
+                log.info("clip #%d não é gameplay (IRL/conversa) e o canal é só gameplay: descartado", n)
+                res.path.unlink(missing_ok=True)
+                return
             repetido = _norm_titulo(texto.titulo) in {_norm_titulo(t) for t in evitar}
             self._titulos.append(texto.titulo)
             texto.titulo = self.ch.titulo_com_tags(texto.titulo)
@@ -266,6 +290,8 @@ class ChannelRunner:
                 log.info("YouTube: não postado (%s)", d.reason)
                 return f"⏭️ YouTube: {d.reason}"
             if not peak.forced:
+                if self.ch.so_gameplay and texto.gameplay is not True:
+                    return "⏭️ YouTube: não deu pra confirmar que é gameplay (canal só gameplay)"
                 if self.ch.so_gta and not (texto.sobre_gta6 or _GTA6_RE.search(info.category or "")):
                     return "⏭️ YouTube: esse streamer só vai pro canal quando o clip é de GTA"
                 if repetido:

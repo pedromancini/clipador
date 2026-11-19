@@ -58,6 +58,21 @@ class TestGemini(unittest.TestCase):
         self.assertIn("#rockstar", c.hashtags)
 
     @mock.patch("requests.post")
+    def test_ia_ve_se_e_gameplay(self, post):
+        import tempfile
+        from pathlib import Path
+        img = Path(tempfile.mkdtemp()) / "q.jpg"
+        img.write_bytes(b"jpeg-falso")
+        post.return_value = gemini(json.dumps({"titulo": "coringa mostra a moto do evento", "legenda": "x",
+                                               "sobre_gta6": True, "gameplay": False, "viral": 7}))
+        c = self.cw().make("coringa", [], "texto", None, 25, [], "Grand Theft Auto VI", "x", TAGS, images=[img])
+        self.assertIs(c.gameplay, False)
+        enviado = post.call_args.kwargs["json"]["contents"][0]["parts"]
+        self.assertTrue(any(p.get("inline_data", {}).get("mime_type") == "image/jpeg" for p in enviado))
+        c = self.cw().make("coringa", [], "texto", None, 25, [], "Grand Theft Auto VI", "x", TAGS)
+        self.assertIsNone(c.gameplay)   # sem quadros, a IA não tem como saber
+
+    @mock.patch("requests.post")
     def test_ia_diz_que_nao_e_gta_tira_hashtag(self, post):
         post.return_value = gemini('{"titulo": "alanzoka perdeu a paciência no vôlei 😂", "legenda": "x?", '
                                    '"sobre_gta6": false, "hashtags": ["#volei", "#gta6"], "viral": 5}')

@@ -34,6 +34,7 @@ class ClipCopy:
     sobre_gta6: bool = False
     fonte: str = "local"             # "gemini" ou "local"
     titulo_longo: str = ""           # título da versão horizontal (vídeo normal do YouTube)
+    gameplay: bool | None = None     # a IA viu tela de jogo nos quadros? (None = não sabe / sem IA)
 
 
 # ------------------------------------------------------------------ plano B (sem IA)
@@ -96,7 +97,8 @@ def _hashtags(base: list[str], channel: str, gta: bool, extras: list[str], limit
 
 # ------------------------------------------------------------------ Gemini
 PROMPT = """Você é social media de um canal de CORTES de lives brasileiras (TikTok e YouTube Shorts).
-Ouça o áudio deste clip de ~40s da live de "{canal}" e escreva o texto do post.
+Ouça o áudio deste clip de ~40s da live de "{canal}" (e veja os quadros do vídeo, se vierem) e escreva o
+texto do post.
 
 Contexto:
 - Título da live: {titulo_live}
@@ -118,10 +120,13 @@ Regras:
   (ex.: "EU NÃO ACREDITO NISSO" - {canal} reage ao final da missão).
 - "legenda": 1 ou 2 frases curtas pro TikTok (gancho + uma pergunta que puxe comentários). Sem hashtags.
 - "sobre_gta6": true SÓ se o clip fala ou mostra GTA 6 / GTA VI de verdade.
+- "gameplay": true se os quadros mostram a TELA DE UM VIDEOGAME sendo jogado (gameplay, mapa, menu ou
+  cutscene do jogo contam, mesmo com a câmera do streamer num canto); false se é câmera da vida real
+  (evento presencial, IRL, rua, só o streamer conversando em tela cheia). Sem quadros: null.
 - "hashtags": 3 a 5 hashtags específicas do conteúdo (jogo, situação). Sem #fyp/#viral (já entram sozinhas).
 - "viral": nota de 0 a 10 de potencial de viralizar (graça, surpresa, frase marcante, contexto que
   quem não conhece o streamer entende). Seja exigente: 8+ só para momentos realmente fortes.
-Responda SÓ o JSON: {{"titulo": "...", "titulo_longo": "...", "legenda": "...", "sobre_gta6": false, "hashtags": ["#..."], "viral": 0}}"""
+Responda SÓ o JSON: {{"titulo": "...", "titulo_longo": "...", "legenda": "...", "sobre_gta6": false, "gameplay": true, "hashtags": ["#..."], "viral": 0}}"""
 
 
 def _sem_acento(t: str) -> str:
@@ -228,7 +233,8 @@ class Copywriter:
 
     def gemini_copy(self, channel: str, audio_path: Path | None, transcript: str, peak_offset: float,
                     top_messages: list[tuple[str, int]], category: str | None, stream_title: str | None,
-                    base_tags: list[str], evitar: list[str] | None = None) -> ClipCopy:
+                    base_tags: list[str], evitar: list[str] | None = None,
+                    images: list[Path] | None = None) -> ClipCopy:
         chat = ", ".join(f"{m} ({n}x)" for m, n in (top_messages or [])[:6]) or "(sem dados)"
         ev = "; ".join(f'"{t}"' for t in (evitar or [])[-20:]) or "(nenhum)"
         prompt = PROMPT.format(canal=channel, titulo_live=stream_title or "(desconhecido)",
@@ -238,6 +244,10 @@ class Copywriter:
         if audio_path and Path(audio_path).exists() and Path(audio_path).stat().st_size < 15_000_000:
             parts.append({"inline_data": {"mime_type": "audio/wav",
                                           "data": base64.b64encode(Path(audio_path).read_bytes()).decode()}})
+        for img in (images or [])[:3]:
+            if Path(img).exists() and Path(img).stat().st_size < 2_000_000:
+                parts.append({"inline_data": {"mime_type": "image/jpeg",
+                                              "data": base64.b64encode(Path(img).read_bytes()).decode()}})
         parts.append({"text": prompt})
         txt = self._call(parts)
         m = re.search(r"\{.*\}", txt, re.DOTALL)
@@ -259,11 +269,13 @@ class Copywriter:
         longo = re.sub(r"#\S+", "", re.sub(r"\s+", " ", str(d.get("titulo_longo") or ""))).strip()
         return ClipCopy(titulo=titulo[:95], legenda=legenda[:300], viral=viral, sobre_gta6=gta,
                         hashtags=_hashtags(base_tags, channel, gta, extras, limite=8), fonte="gemini",
-                        titulo_longo=longo[:85])
+                        titulo_longo=longo[:85],
+                        gameplay=d.get("gameplay") if isinstance(d.get("gameplay"), bool) and images else None)
 
     def make(self, channel: str, words, transcript: str, audio_path: Path | None, peak_offset: float,
              top_messages: list[tuple[str, int]], category: str | None, stream_title: str | None,
-             base_tags: list[str], evitar: list[str] | None = None) -> ClipCopy:
+             base_tags: list[str], evitar: list[str] | None = None,
+             images: list[Path] | None = None) -> ClipCopy:
         """Texto do post: Gemini se configurado, senão (ou se falhar) o plano B local."""
         base = [t for t in base_tags if t.lower() not in ("#gta6", "#gta", "#gtavi")]
         if self.configured and self._falhas_seguidas >= 5 and time.time() >= self._pausa_ate:
@@ -271,7 +283,7 @@ class Copywriter:
         if self.configured and self._falhas_seguidas < 5:
             try:
                 c = self.gemini_copy(channel, audio_path, transcript, peak_offset, top_messages, category,
-                                     stream_title, base, evitar)
+                                     stream_title, base, evitar, images)
                 self._falhas_seguidas = 0
                 log.info("título (IA, viral %s/10): %s", c.viral, c.titulo)
                 return c
