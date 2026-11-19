@@ -99,6 +99,54 @@ def watermark_filter(workdir: Path, texto: str, entrada: str, saida: str) -> str
             f"x=w-text_w-44:y=168{saida}")  # canto direito, abaixo da barra de busca do Shorts
 
 
+def editar_final(video: Path, workdir: Path, gancho: str = "", pico: float | None = None,
+                 watermark: str | None = None, zoom: bool = True, y_gancho: int = 700) -> Path:
+    """Edição própria por cima do clip pronto:
+    - zoom rápido (8%) por 1,4s no auge do momento;
+    - frase gancho grande nos primeiros 2,5s;
+    - marca d'água por último (fica legível o vídeo inteiro, inclusive durante o zoom)."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    fonte = Path(__file__).resolve().parent.parent / "fonts" / "Anton-Regular.ttf"
+    if fonte.exists():
+        shutil.copy2(fonte, workdir / "edit.ttf")
+    font = "fontfile=edit.ttf:" if (workdir / "edit.ttf").exists() else ""
+    vf = "[0:v]null[v0]"
+    atual = "[v0]"
+    if zoom and pico is not None and pico > 1:
+        a = max(0.0, pico - 0.4)
+        vf += (f";{atual}split[za][zb];[zb]scale={int(W * 1.08) // 2 * 2}:{int(H * 1.08) // 2 * 2},crop={W}:{H}[zz];"
+               f"[za][zz]overlay=0:0:enable='between(t,{a:.2f},{a + 1.4:.2f})'[v1]")
+        atual = "[v1]"
+    if watermark:
+        vf += ";" + watermark_filter(workdir, watermark, atual, "[v2]")
+        atual = "[v2]"
+    gancho = (gancho or "").strip()
+    if gancho:
+        palavras, linhas, linha = gancho.split(), [], ""
+        for p in palavras:   # quebra em até 2 linhas de ~16 caracteres
+            if linha and len(linha) + 1 + len(p) > 16 and len(linhas) < 1:
+                linhas.append(linha)
+                linha = p
+            else:
+                linha = f"{linha} {p}".strip()
+        linhas.append(linha)
+        (workdir / "gancho.txt").write_bytes("\n".join(linhas).encode("utf-8"))   # só \n (sem o \r do Windows)
+        vf += (f";{atual}drawtext={font}textfile=gancho.txt:fontsize=96:fontcolor=white:borderw=7:"
+               f"bordercolor=black:line_spacing=10:text_align=C:x=(w-text_w)/2:y={y_gancho}:"
+               f"alpha='if(lt(t,2.2),1,max(0,1-(t-2.2)/0.4))':enable='lt(t,2.6)'[v3]")
+        atual = "[v3]"
+    vf += f";{atual}null[vout]"
+    tmp = workdir / "editado.mp4"
+    cmd = [ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(video),
+           "-filter_complex", vf, "-map", "[vout]", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast",
+           "-crf", "22", "-maxrate", "8M", "-bufsize", "16M", "-pix_fmt", "yuv420p", "-c:a", "copy",
+           "-movflags", "+faststart", str(tmp)]
+    _run(cmd, cwd=workdir)
+    shutil.move(str(tmp), video)
+    log.info("edição: zoom=%s gancho=%r marca=%s", bool(zoom and pico), gancho, bool(watermark))
+    return video
+
+
 def build_horizontal(segments: list[tuple[float, Path]], t0: float, duration: float, out_path: Path,
                      workdir: Path, fps: int = 30, watermark: str | None = None) -> Path:
     """Versão 16:9 (1920x1080) do momento, com a tela da live inteira, pra postar como vídeo normal."""

@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from .config import load_config
-from .youtube import YouTube, YouTubeLimitError, build_metadata, conta_teto, marker
+from .youtube import YouTube, YouTubeLimitError, build_metadata, conta_teto, marker, reserva_conta
 
 log = logging.getLogger("clipador.postar_lote")
 
@@ -153,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as e:  # noqa: BLE001
                 log.warning("não consegui contar os envios do canal: %s", e)
                 cs = None
-            livre = conta_teto(ys, conta) - int(ys.get("reserva_live", 4))
+            livre = conta_teto(ys, conta) - reserva_conta(ys, conta)
             if cs is not None and cs.ult24h >= livre:
                 if args.esperar_limite and time.monotonic() + 1800 < fim:
                     log.info("canal com %d envios em 24h (vagas dos antigos: %d); espero 30 min", cs.ult24h, livre)

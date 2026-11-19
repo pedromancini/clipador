@@ -35,6 +35,7 @@ class ClipCopy:
     fonte: str = "local"             # "gemini" ou "local"
     titulo_longo: str = ""           # título da versão horizontal (vídeo normal do YouTube)
     gameplay: bool | None = None     # a IA viu tela de jogo nos quadros? (None = não sabe / sem IA)
+    gancho: str = ""                 # frase curta que aparece grande na tela nos primeiros segundos
 
 
 # ------------------------------------------------------------------ plano B (sem IA)
@@ -115,6 +116,9 @@ Regras:
   ("momento mais engraçado da live", "fez o chat chorar de rir", "não aguentou", "momento insano").
   NÃO invente nada que não acontece no clip (nem ações, nem falas, nem polêmicas). Sem clickbait mentiroso.
   No máximo 2 emojis. NÃO repita nem imite estes títulos já usados no canal: {evitar}
+- "gancho": frase que aparece GRANDE na tela nos 2 primeiros segundos do vídeo, pra prender quem está
+  passando: 2 a 5 palavras, CAIXA ALTA, até 28 caracteres, sem emoji, sem hashtag, sem entregar o final
+  (ex.: "ELE NÃO ESPERAVA ISSO", "OLHA O QUE ELE FEZ", "O JACARÉ APARECEU"). Tem que ter a ver com o clip.
 - "titulo_longo": título pro vídeo HORIZONTAL do YouTube, até 80 caracteres, sem emojis e sem hashtags:
   a frase ou ação principal em CAIXA ALTA, depois " - " e uma descrição curta com o nome
   (ex.: "EU NÃO ACREDITO NISSO" - {canal} reage ao final da missão).
@@ -126,7 +130,7 @@ Regras:
 - "hashtags": 3 a 5 hashtags específicas do conteúdo (jogo, situação). Sem #fyp/#viral (já entram sozinhas).
 - "viral": nota de 0 a 10 de potencial de viralizar (graça, surpresa, frase marcante, contexto que
   quem não conhece o streamer entende). Seja exigente: 8+ só para momentos realmente fortes.
-Responda SÓ o JSON: {{"titulo": "...", "titulo_longo": "...", "legenda": "...", "sobre_gta6": false, "gameplay": true, "hashtags": ["#..."], "viral": 0}}"""
+Responda SÓ o JSON: {{"titulo": "...", "gancho": "...", "titulo_longo": "...", "legenda": "...", "sobre_gta6": false, "gameplay": true, "hashtags": ["#..."], "viral": 0}}"""
 
 
 def _sem_acento(t: str) -> str:
@@ -270,6 +274,7 @@ class Copywriter:
         return ClipCopy(titulo=titulo[:95], legenda=legenda[:300], viral=viral, sobre_gta6=gta,
                         hashtags=_hashtags(base_tags, channel, gta, extras, limite=8), fonte="gemini",
                         titulo_longo=longo[:85],
+                        gancho=re.sub(r"[#\U0001F000-\U0001FFFF]", "", str(d.get("gancho") or "")).strip().upper()[:32],
                         gameplay=d.get("gameplay") if isinstance(d.get("gameplay"), bool) and images else None)
 
     def make(self, channel: str, words, transcript: str, audio_path: Path | None, peak_offset: float,

@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .clipper import build_clip
+from .clipper import build_clip, editar_final
 from .config import ROOT, load_config, parse_channel_ref
 from .copywriter import Copywriter
 from .cortar_vod import baixar
@@ -397,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
             res = build_clip([(0.0, src)], 0.0, dur, out, w / "clip", layout=ch.layout, facecam=ch.facecam,
                              fps=int(s["fps"]), with_subtitles=True, burn_subtitles=bool(s["subtitles"]),
                              whisper_model=s["whisper_model"], language=s["language"],
-                             facecam_auto=ch.facecam_auto, watermark=ch.watermark,
+                             facecam_auto=ch.facecam_auto, watermark=None if ch.editar else ch.watermark,
                              sub_size=int(s["subtitle_size"]), sub_position=s["subtitle_position"])
             quadros = quadros_do_clip(res.path, res.duration, w)
             dica = f"{vod.titulo} | clip do público: \"{c.titulo_clip}\"" if c.titulo_clip else vod.titulo
@@ -415,6 +415,10 @@ def main(argv: list[str] | None = None) -> int:
                 log.info("candidato %d (%s) não é gameplay: descartado", i, _hms(c.centro))
                 res.path.unlink(missing_ok=True)
                 continue
+            if ch.editar:
+                editar_final(res.path, w / "edit", texto.gancho if ch.edicao.get("gancho") else "", c.centro - t0,
+                             ch.watermark, zoom=bool(ch.edicao.get("zoom_pico")),
+                             y_gancho=700 if ch.layout == "facecam" else 300)
             texto.titulo = ch.titulo_com_tags(texto.titulo)
             texto.hashtags = ch.limpar_hashtags(texto.hashtags)
             usados.append(texto.titulo)
@@ -429,7 +433,7 @@ def main(argv: list[str] | None = None) -> int:
                      "youtube": None, "vod": f"{vod.url} @ {_hms(t0)}", "origem": "vod",
                      "sinais": {"views_clips": c.views, "chat": c.chat, "sinal": c.sinal, "final": final,
                                 "fontes": c.origem, "clip_publico": c.titulo_clip},
-                     "gameplay": texto.gameplay, "titulo_longo": texto.titulo_longo}
+                     "gameplay": texto.gameplay, "titulo_longo": texto.titulo_longo, "gancho": texto.gancho}
             out.with_suffix(".json").write_text(json.dumps(dados, ensure_ascii=False, indent=1), encoding="utf-8")
             feitos.append((final, dados, out))
             log.info("✅ %d/%d %s  nota %s  final %.2f  %s", i, len(cands), _hms(c.centro), texto.viral, final,

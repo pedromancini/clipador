@@ -26,7 +26,7 @@ from pathlib import Path
 
 from . import summary
 from .chat import make_chat_reader
-from .clipper import build_clip, build_horizontal
+from .clipper import build_clip, build_horizontal, editar_final
 from .copywriter import _GTA6_RE, ClipCopy, Copywriter
 from .config import DEFAULT_YOUTUBE, ROOT, Channel, Config, Facecam
 from .detector import HypeDetector, Peak
@@ -193,7 +193,7 @@ class ChannelRunner:
                              fps=int(self.s["fps"]), with_subtitles=True, burn_subtitles=bool(self.s["subtitles"]),
                              whisper_model=self.s["whisper_model"], language=self.s["language"],
                              facecam_auto=self.ch.facecam_auto, facecam_last_good=self._facecam_last_good,
-                             watermark=self.ch.watermark,
+                             watermark=None if self.ch.editar else self.ch.watermark,
                              sub_size=int(self.s["subtitle_size"]),
                              sub_position=self.s["subtitle_position"])
             if res.facecam_refined is not None:
@@ -210,6 +210,15 @@ class ChannelRunner:
                 log.info("clip #%d não é gameplay (IRL/conversa) e o canal é só gameplay: descartado", n)
                 res.path.unlink(missing_ok=True)
                 return
+            if self.ch.editar:
+                try:
+                    editar_final(res.path, workdir / "edit", texto.gancho if self.ch.edicao.get("gancho") else "",
+                                 max(0.0, peak.t - t0), self.ch.watermark, zoom=bool(self.ch.edicao.get("zoom_pico")),
+                                 y_gancho=700 if self.ch.layout == "facecam" else 300)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("edição falhou (%s); clip vai sem ela", e)
+                    if self.ch.watermark:   # a marca d'água é obrigatória: sem ela, não posta
+                        raise
             repetido = _norm_titulo(texto.titulo) in {_norm_titulo(t) for t in evitar}
             self._titulos.append(texto.titulo)
             texto.titulo = self.ch.titulo_com_tags(texto.titulo)

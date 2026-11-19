@@ -108,3 +108,29 @@ class TestHorizontal(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEdicao(unittest.TestCase):
+    def test_hashtag_de_tiktok_nao_vai_pro_youtube(self):
+        m = build_metadata("x", "allanstag", "Kick", "u", ["#allanstag", "#fyp", "#viral", "#gta6"], "kick", "20",
+                           "public", False)
+        self.assertNotIn("#fyp", m["snippet"]["description"])
+        self.assertNotIn("viral", m["snippet"]["tags"])
+        self.assertIn("allanstag", m["snippet"]["tags"])
+
+    def test_reserva_por_conta(self):
+        from clipador.youtube import reserva_conta
+        self.assertEqual(reserva_conta({"reserva_live": {"principal": 4, "dante": 0}}, "dante"), 0)
+        self.assertEqual(reserva_conta({"reserva_live": {"principal": 4, "dante": 0}}, ""), 4)
+        self.assertEqual(reserva_conta({"reserva_live": 3}, "dante"), 3)
+
+    def test_editar_final(self):
+        from clipador.clipper import editar_final, media_duration
+        d = Path(tempfile.mkdtemp())
+        src = d / "v.mp4"
+        subprocess.run([ffmpeg_bin(), "-v", "error", "-f", "lavfi", "-i", "testsrc=s=1080x1920:r=30:d=6",
+                        "-f", "lavfi", "-i", "sine=d=6", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                        "-shortest", str(src)], check=True)
+        editar_final(src, d / "w", "ELE NÃO ESPERAVA ISSO", 3.0, "kick.com/teste", zoom=True)
+        self.assertAlmostEqual(media_duration(src), 6.0, delta=0.5)
+        self.assertEqual((d / "w" / "gancho.txt").read_bytes().count(b"\r"), 0)

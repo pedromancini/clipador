@@ -52,6 +52,18 @@ def _checa_limite(resp) -> None:
                                 "(uploadLimitExceeded; verificar o canal em youtube.com/verify aumenta o limite)")
 
 
+# hashtags que só funcionam no TikTok (no YouTube não ajudam e parecem spam)
+SO_TIKTOK = {"fyp", "foryou", "foryoupage", "fy", "viral", "viralvideo", "tiktok", "xyzbca"}
+
+
+def reserva_conta(yt_settings: dict, conta: str) -> int:
+    """Vagas das 24h que o postar_lote deixa livres pras lives (por conta ou um número só)."""
+    r = yt_settings.get("reserva_live", 4)
+    if isinstance(r, dict):
+        return int(r.get(conta or "principal", r.get("principal", 4)))
+    return int(r)
+
+
 def marker(platform: str, name: str) -> str:
     return f"clipador:{platform}/{name}"
 
@@ -63,6 +75,7 @@ def build_metadata(title: str, channel_name: str, platform_label: str, channel_u
 
     short=False: vídeo normal (versão horizontal), sem o #Shorts."""
     titulo = re.sub(r"[<>]", "", title).strip()
+    hashtags = [h for h in hashtags if h.lower().lstrip("#") not in SO_TIKTOK]
     sufixo = " #Shorts" if short else ""
     if len(titulo) + len(sufixo) > 100:
         titulo = titulo[: 100 - len(sufixo) - 1].rstrip() + "…"

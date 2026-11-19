@@ -120,6 +120,12 @@ class Channel:
     so_gta: bool = False       # true = só posta no YouTube os clips de GTA (streamer que joga outras coisas)
     horizontal: bool = True    # false = nunca posta a versão horizontal deste streamer
     so_gameplay: bool = False  # true = descarta clip que não é tela de jogo (IRL, evento, só conversa)
+    # edição própria: {"gancho": frase grande nos 1os 2,5s, "zoom_pico": zoom rápido no auge}
+    edicao: dict | None = None
+
+    @property
+    def editar(self) -> bool:
+        return bool(self.edicao and (self.edicao.get("gancho") or self.edicao.get("zoom_pico")))
 
     def limpar_hashtags(self, tags: list[str]) -> list[str]:
         """Tira hashtag da OUTRA plataforma (ex.: #clipsdetwitch num streamer do Kick)."""
@@ -229,6 +235,7 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         so_gta=bool(raw.get("so_gta", False)),
         horizontal=bool(raw.get("horizontal", True)),
         so_gameplay=bool(raw.get("so_gameplay", False)),
+        edicao=raw.get("edicao") if isinstance(raw.get("edicao"), dict) else None,
     )
     _validate_channel(ch, where)
     return ch

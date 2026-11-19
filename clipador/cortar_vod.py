@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin
 
-from .clipper import build_clip
+from .clipper import build_clip, editar_final
 from .recorder import ffmpeg_bin
 from .config import ROOT, load_config, parse_channel_ref
 from .copywriter import ClipCopy, Copywriter
@@ -141,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--canal", default="twitch/alanzoka", help="plataforma/canal (define o canal do YouTube)")
     ap.add_argument("--titulo", default="", help="vazio = a IA escreve")
     ap.add_argument("--legenda", default="")
+    ap.add_argument("--gancho", default="", help="frase grande nos 1os segundos (vazio = a IA escreve)")
     ap.add_argument("--postar", action="store_true", help="posta no YouTube")
     ap.add_argument("--privacy", default=None, choices=["public", "unlisted", "private"])
     ap.add_argument("--out", default=str(ROOT / "clips"))
@@ -174,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                      fps=int(s["fps"]), with_subtitles=True, burn_subtitles=bool(s["subtitles"]), whisper_model=s["whisper_model"],
                      language=s["language"], facecam_auto=ch.facecam_auto,
                      sub_size=int(s["subtitle_size"]), sub_position=s["subtitle_position"],
-                     watermark=ch.watermark)
+                     watermark=None if ch.editar else ch.watermark)
     log.info("clip pronto: %s (%.0fs)", out, res.duration)
 
     tags = ch.hashtags or s["hashtags"]
@@ -186,6 +187,9 @@ def main(argv: list[str] | None = None) -> int:
         wav = work / "clip" / "audio.wav"
         texto = Copywriter().make(ch.name, res.words, res.transcript, wav if wav.exists() else None,
                                   dur / 2, [], categoria, titulo_live, tags)
+    if ch.editar:
+        editar_final(out, work / "edit", (args.gancho or texto.gancho) if ch.edicao.get("gancho") else "", dur / 2,
+                     ch.watermark, zoom=bool(ch.edicao.get("zoom_pico")), y_gancho=700 if ch.layout == "facecam" else 300)
     texto.titulo = ch.titulo_com_tags(texto.titulo)
     texto.hashtags = ch.limpar_hashtags(texto.hashtags)
     print(f"TÍTULO: {texto.titulo}\nLEGENDA: {texto.legenda}\nHASHTAGS: {' '.join(texto.hashtags)}", flush=True)

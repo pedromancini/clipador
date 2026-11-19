@@ -41,10 +41,10 @@
       "extreme_hype_ratio": 8.0,
       "extreme_posts_per_hour": 3,
       "max_posts_per_day": 10,
-      "max_uploads_24h": {"principal": 11, "dante": 10},
+      "max_uploads_24h": {"principal": 11, "dante": 4},
       "viral_minimo": [6.5, 7.5, 8.5],
       "account_min_minutes_between_posts": 20,
-      "reserva_live": 4,
+      "reserva_live": {"principal": 4, "dante": 0},
       "horizontal": {"enabled": true, "min_viral": 8.0, "max_24h": 3, "extra_before_seconds": 20},
       "category_id": "20",
       "made_for_kids": false
@@ -68,6 +68,7 @@
       "youtube_conta": "dante",
       "hashtags": ["#allanstag", "#cortes", "#kick", "#clips", "#fyp", "#viral"],
       "horizontal": false,
+      "edicao": {"gancho": true, "zoom_pico": true},
       "enabled": true
     },
 
