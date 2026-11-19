@@ -348,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--candidatos", type=int, default=30, help="quantos momentos analisar com a IA")
     ap.add_argument("--out", default=str(ROOT / "clips"))
     ap.add_argument("--so-sinais", action="store_true", help="só lista os candidatos (não baixa nada)")
+    ap.add_argument("--so-gameplay", action="store_true", help="descarta o que não é gameplay (mesmo se o canal não tiver so_gameplay)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 
@@ -410,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
                 copy._falhas_seguidas = min(copy._falhas_seguidas, 4)
                 texto = copy.make(ch.name, res.words, res.transcript, wav if wav.exists() else None, 30.0,
                                   c.mensagens, vod.categoria, dica, tags, evitar=usados, images=quadros)
-            if ch.so_gameplay and texto.gameplay is False:
+            if (ch.so_gameplay or args.so_gameplay) and texto.gameplay is False:
                 log.info("candidato %d (%s) não é gameplay: descartado", i, _hms(c.centro))
                 res.path.unlink(missing_ok=True)
                 continue

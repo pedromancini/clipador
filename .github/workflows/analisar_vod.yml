@@ -22,6 +22,10 @@ on:
         description: "Quantos momentos a IA analisa por streamer"
         required: false
         default: "30"
+      so_gameplay:
+        description: "Só gameplay (descarta conversa/IRL em todos os canais)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -87,7 +91,8 @@ jobs:
           VOD: ${{ inputs.vod }}
           MAX: ${{ inputs.max }}
           CAND: ${{ inputs.candidatos }}
-        run: python -m clipador.vod_analise --canal "$CANAL" --vod "$VOD" --max "$MAX" --candidatos "$CAND"
+          SO_GAMEPLAY: ${{ inputs.so_gameplay && '--so-gameplay' || '' }}
+        run: python -m clipador.vod_analise --canal "$CANAL" --vod "$VOD" --max "$MAX" --candidatos "$CAND" $SO_GAMEPLAY
 
       - name: Clips (artifact, 3 dias)
         if: always()
