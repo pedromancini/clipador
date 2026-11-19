@@ -191,7 +191,7 @@ def _encode(src: Path, out: Path, workdir: Path, offset: float, duration: float,
         "-c:v", "libx264", "-preset", "veryfast", *video_args,
         "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", str(fps), "-g", str(fps * 2),
         "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
-        "-af", "aresample=async=1:first_pts=0",
+        "-af", "aresample=async=1:first_pts=0,loudnorm=I=-14:TP=-1.5:LRA=11",
         "-movflags", "+faststart", str(out),
     ]
     _run(cmd, cwd=workdir)

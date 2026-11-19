@@ -130,7 +130,17 @@ Regras:
 - "hashtags": 3 a 5 hashtags específicas do conteúdo (jogo, situação). Sem #fyp/#viral (já entram sozinhas).
 - "viral": nota de 0 a 10 de potencial de viralizar (graça, surpresa, frase marcante, contexto que
   quem não conhece o streamer entende). Seja exigente: 8+ só para momentos realmente fortes.
+{idioma}
 Responda SÓ o JSON: {{"titulo": "...", "gancho": "...", "titulo_longo": "...", "legenda": "...", "sobre_gta6": false, "gameplay": true, "hashtags": ["#..."], "viral": 0}}"""
+
+
+IDIOMAS = {
+    "en": ("IMPORTANTE: o streamer é americano e o público do post fala INGLÊS. Escreva \"titulo\", \"gancho\", "
+           "\"titulo_longo\" e \"legenda\" em INGLÊS americano informal (gírias de internet ok); frases citadas "
+           "ficam na língua original. As regras acima continuam valendo."),
+    "es": ("IMPORTANTE: o público do post fala ESPANHOL. Escreva \"titulo\", \"gancho\", \"titulo_longo\" e "
+           "\"legenda\" em espanhol latino informal."),
+}
 
 
 def _sem_acento(t: str) -> str:
@@ -238,12 +248,13 @@ class Copywriter:
     def gemini_copy(self, channel: str, audio_path: Path | None, transcript: str, peak_offset: float,
                     top_messages: list[tuple[str, int]], category: str | None, stream_title: str | None,
                     base_tags: list[str], evitar: list[str] | None = None,
-                    images: list[Path] | None = None) -> ClipCopy:
+                    images: list[Path] | None = None, idioma: str = "") -> ClipCopy:
         chat = ", ".join(f"{m} ({n}x)" for m, n in (top_messages or [])[:6]) or "(sem dados)"
         ev = "; ".join(f'"{t}"' for t in (evitar or [])[-20:]) or "(nenhum)"
         prompt = PROMPT.format(canal=channel, titulo_live=stream_title or "(desconhecido)",
                                categoria=category or "(desconhecida)", pico=peak_offset, chat=chat,
-                               fala=(transcript or "(sem fala detectada)")[:1500], evitar=ev)
+                               fala=(transcript or "(sem fala detectada)")[:1500], evitar=ev,
+                               idioma=IDIOMAS.get(idioma, ""))
         parts: list[dict] = []
         if audio_path and Path(audio_path).exists() and Path(audio_path).stat().st_size < 15_000_000:
             parts.append({"inline_data": {"mime_type": "audio/wav",
@@ -280,7 +291,7 @@ class Copywriter:
     def make(self, channel: str, words, transcript: str, audio_path: Path | None, peak_offset: float,
              top_messages: list[tuple[str, int]], category: str | None, stream_title: str | None,
              base_tags: list[str], evitar: list[str] | None = None,
-             images: list[Path] | None = None) -> ClipCopy:
+             images: list[Path] | None = None, idioma: str = "") -> ClipCopy:
         """Texto do post: Gemini se configurado, senão (ou se falhar) o plano B local."""
         base = [t for t in base_tags if t.lower() not in ("#gta6", "#gta", "#gtavi")]
         if self.configured and self._falhas_seguidas >= 5 and time.time() >= self._pausa_ate:
@@ -288,7 +299,7 @@ class Copywriter:
         if self.configured and self._falhas_seguidas < 5:
             try:
                 c = self.gemini_copy(channel, audio_path, transcript, peak_offset, top_messages, category,
-                                     stream_title, base, evitar, images)
+                                     stream_title, base, evitar, images, idioma)
                 self._falhas_seguidas = 0
                 log.info("título (IA, viral %s/10): %s", c.viral, c.titulo)
                 return c
@@ -298,5 +309,9 @@ class Copywriter:
                     self._pausa_ate = time.time() + 600
                     log.warning("Gemini falhou 5x seguidas; tento de novo em 10 min")
                 log.warning("Gemini falhou (%s); usando título local", str(e)[:200])
-        return local_copy(channel, words, peak_offset, top_messages, category, stream_title, base,
-                          seed=time.time() // 60)
+        c = local_copy(channel, words, peak_offset, top_messages, category, stream_title, base,
+                       seed=time.time() // 60)
+        if idioma == "en":   # plano B em inglês (genérico; não vai pro YouTube mesmo)
+            c.titulo = f"GTA 6: {channel} can't believe this 😳" if c.sobre_gta6 else f"{channel} can't believe this 😳"
+            c.legenda = f"{c.titulo}\nWould you do the same?"
+        return c

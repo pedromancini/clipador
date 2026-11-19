@@ -173,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
 
     res = build_clip([(0.0, src)], 0.0, dur, out, work / "clip", layout=ch.layout, facecam=ch.facecam,
                      fps=int(s["fps"]), with_subtitles=True, burn_subtitles=bool(s["subtitles"]), whisper_model=s["whisper_model"],
-                     language=s["language"], facecam_auto=ch.facecam_auto,
+                     language=ch.idioma or s["language"], facecam_auto=ch.facecam_auto,
                      sub_size=int(s["subtitle_size"]), sub_position=s["subtitle_position"],
                      watermark=None if ch.editar else ch.watermark)
     log.info("clip pronto: %s (%.0fs)", out, res.duration)
@@ -186,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         wav = work / "clip" / "audio.wav"
         texto = Copywriter().make(ch.name, res.words, res.transcript, wav if wav.exists() else None,
-                                  dur / 2, [], categoria, titulo_live, tags)
+                                  dur / 2, [], categoria, titulo_live, tags, idioma=ch.idioma)
     if ch.editar:
         editar_final(out, work / "edit", (args.gancho or texto.gancho) if ch.edicao.get("gancho") else "", dur / 2,
                      ch.watermark, zoom=bool(ch.edicao.get("zoom_pico")), y_gancho=700 if ch.layout == "facecam" else 300)

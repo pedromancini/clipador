@@ -191,7 +191,7 @@ class ChannelRunner:
             out = self.out_dir / f"{self.ch.slug}_{quando}.mp4"
             res = build_clip(segs, t0, t1 - t0, out, workdir, layout=self.ch.layout, facecam=self.ch.facecam,
                              fps=int(self.s["fps"]), with_subtitles=True, burn_subtitles=bool(self.s["subtitles"]),
-                             whisper_model=self.s["whisper_model"], language=self.s["language"],
+                             whisper_model=self.s["whisper_model"], language=self.ch.idioma or self.s["language"],
                              facecam_auto=self.ch.facecam_auto, facecam_last_good=self._facecam_last_good,
                              watermark=None if self.ch.editar else self.ch.watermark,
                              sub_size=int(self.s["subtitle_size"]),
@@ -205,7 +205,7 @@ class ChannelRunner:
             quadros = quadros_do_clip(res.path, res.duration, workdir)
             texto = self.copy.make(self.ch.name, res.words, res.transcript, workdir / "audio.wav",
                                    max(0.0, peak.t - t0), peak.top_messages, info.category, info.title,
-                                   self.hashtags, evitar=evitar, images=quadros)
+                                   self.hashtags, evitar=evitar, images=quadros, idioma=self.ch.idioma)
             if self.ch.so_gameplay and texto.gameplay is False and not peak.forced:
                 log.info("clip #%d não é gameplay (IRL/conversa) e o canal é só gameplay: descartado", n)
                 res.path.unlink(missing_ok=True)

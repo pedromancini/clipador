@@ -383,8 +383,8 @@ def main(argv: list[str] | None = None) -> int:
     feitos: list[tuple[float, dict, Path]] = []
     usados: list[str] = []
     for i, c in enumerate(cands, 1):
-        t0 = max(0.0, c.centro - 30)
-        dur = min(52.0, vod.duracao - t0) if vod.duracao else 52.0
+        t0 = max(0.0, c.centro - 20)
+        dur = min(35.0, vod.duracao - t0) if vod.duracao else 35.0
         if dur < 10:
             continue
         w = work / f"c{i}"
@@ -396,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
             out = out_dir / f"{ch.slug}_{quando:%Y%m%d-%H%M%S}.mp4"
             res = build_clip([(0.0, src)], 0.0, dur, out, w / "clip", layout=ch.layout, facecam=ch.facecam,
                              fps=int(s["fps"]), with_subtitles=True, burn_subtitles=bool(s["subtitles"]),
-                             whisper_model=s["whisper_model"], language=s["language"],
+                             whisper_model=s["whisper_model"], language=ch.idioma or s["language"],
                              facecam_auto=ch.facecam_auto, watermark=None if ch.editar else ch.watermark,
                              sub_size=int(s["subtitle_size"]), sub_position=s["subtitle_position"])
             quadros = quadros_do_clip(res.path, res.duration, w)
@@ -404,13 +404,13 @@ def main(argv: list[str] | None = None) -> int:
             if em_alta:
                 dica += " | em alta no YouTube agora: " + "; ".join(em_alta[:15])
             wav = w / "clip" / "audio.wav"
-            texto = copy.make(ch.name, res.words, res.transcript, wav if wav.exists() else None, 30.0,
-                              c.mensagens, vod.categoria, dica, tags, evitar=usados, images=quadros)
+            texto = copy.make(ch.name, res.words, res.transcript, wav if wav.exists() else None, 20.0,
+                              c.mensagens, vod.categoria, dica, tags, evitar=usados, images=quadros, idioma=ch.idioma)
             if texto.fonte != "gemini" and copy.configured:   # IA lenta/ocupada: espera e tenta de novo
                 time.sleep(30)
                 copy._falhas_seguidas = min(copy._falhas_seguidas, 4)
-                texto = copy.make(ch.name, res.words, res.transcript, wav if wav.exists() else None, 30.0,
-                                  c.mensagens, vod.categoria, dica, tags, evitar=usados, images=quadros)
+                texto = copy.make(ch.name, res.words, res.transcript, wav if wav.exists() else None, 20.0,
+                                  c.mensagens, vod.categoria, dica, tags, evitar=usados, images=quadros, idioma=ch.idioma)
             if (ch.so_gameplay or args.so_gameplay) and texto.gameplay is False:
                 log.info("candidato %d (%s) não é gameplay: descartado", i, _hms(c.centro))
                 res.path.unlink(missing_ok=True)

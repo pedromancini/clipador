@@ -122,6 +122,7 @@ class Channel:
     so_gameplay: bool = False  # true = descarta clip que não é tela de jogo (IRL, evento, só conversa)
     # edição própria: {"gancho": frase grande nos 1os 2,5s, "zoom_pico": zoom rápido no auge}
     edicao: dict | None = None
+    idioma: str = ""           # "" = o de settings.language ("pt"); "en" = streamer gringo (fala + títulos em inglês)
 
     @property
     def editar(self) -> bool:
@@ -236,6 +237,7 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         horizontal=bool(raw.get("horizontal", True)),
         so_gameplay=bool(raw.get("so_gameplay", False)),
         edicao=raw.get("edicao") if isinstance(raw.get("edicao"), dict) else None,
+        idioma=str(raw.get("idioma") or "").strip().lower(),
     )
     _validate_channel(ch, where)
     return ch
