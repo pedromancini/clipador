@@ -405,6 +405,11 @@ def main(argv: list[str] | None = None) -> int:
             wav = w / "clip" / "audio.wav"
             texto = copy.make(ch.name, res.words, res.transcript, wav if wav.exists() else None, 30.0,
                               c.mensagens, vod.categoria, dica, tags, evitar=usados, images=quadros)
+            if texto.fonte != "gemini" and copy.configured:   # IA lenta/ocupada: espera e tenta de novo
+                time.sleep(30)
+                copy._falhas_seguidas = min(copy._falhas_seguidas, 4)
+                texto = copy.make(ch.name, res.words, res.transcript, wav if wav.exists() else None, 30.0,
+                                  c.mensagens, vod.categoria, dica, tags, evitar=usados, images=quadros)
             if ch.so_gameplay and texto.gameplay is False:
                 log.info("candidato %d (%s) não é gameplay: descartado", i, _hms(c.centro))
                 res.path.unlink(missing_ok=True)
@@ -412,7 +417,8 @@ def main(argv: list[str] | None = None) -> int:
             texto.titulo = ch.titulo_com_tags(texto.titulo)
             texto.hashtags = ch.limpar_hashtags(texto.hashtags)
             usados.append(texto.titulo)
-            nota = (texto.viral or 0) / 10
+            # sem nota da IA (falhou), o ranking usa só os sinais: o momento não é punido por isso
+            nota = texto.viral / 10 if texto.viral is not None else c.sinal
             final = round(0.5 * nota + 0.5 * c.sinal, 3)
             dados = {"arquivo": out.name, "canal": ch.name, "plataforma": ch.platform_label, "url_canal": ch.url,
                      "pico_epoch": vod.inicio + c.centro, "hype": c.chat or None, "titulo": texto.titulo,
