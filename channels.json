@@ -76,6 +76,8 @@
      "so_gta": true, "enabled": true},
     {"url": "https://kick.com/davyjones", "kick_chatroom_id": 137985807, "layout": "facecam", "facecam": "auto",
      "so_gta": true, "enabled": true},
+    {"url": "https://kick.com/coringa", "kick_chatroom_id": 4113274, "layout": "facecam", "facecam": "auto",
+     "so_gta": true, "enabled": true},
     {"url": "https://kick.com/kosky", "kick_chatroom_id": 2708770, "layout": "facecam", "facecam": "auto",
      "so_gta": true, "enabled": true},
     {"url": "https://www.twitch.tv/cellbit", "layout": "facecam", "facecam": "auto", "so_gta": true, "enabled": true},
