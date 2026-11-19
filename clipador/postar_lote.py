@@ -78,6 +78,9 @@ def lista_auto(pasta: Path, maximo: int = 0) -> list[dict]:
             continue
         if d.get("texto_por") == "local":   # título reserva (genérico, se repete): não vai pro YouTube
             continue
+        m = _NOME_RE.match(j.with_suffix(".mp4").name)
+        if m and not load_config().channel_or_default(m.group(1), m.group(2).lower()).youtube:
+            continue   # streamer fora do YouTube (ex.: só TikTok / campanha gringa sem conta ainda)
         itens.append({"arquivo": j.with_suffix(".mp4").name, "titulo": d["titulo"], "legenda": d.get("legenda", ""),
                       "hashtags": d.get("hashtags") or [], "_viral": d.get("viral") or 0, "_hype": d.get("hype") or 0})
     itens.sort(key=lambda x: (-x["_viral"], -x["_hype"]))

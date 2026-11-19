@@ -183,6 +183,12 @@ def legenda(c: Clip) -> str:
     tags = d.get("hashtags") or [*carregar_hashtags(), f"#{canal}"][:8]
     url = d.get("url_canal") or {"twitch": f"twitch.tv/{canal}", "kick": f"kick.com/{canal}"}.get(plataforma, "")
     credito = f"Créditos: {url.replace('https://', '').replace('www.', '')}" if url else f"Créditos: {canal}"
+    ch = _canal_cfg(canal)
+    if ch is not None and ch.marcar:
+        credito += f" | {ch.marcar}"
+    if ch is not None and ch.campanha:   # campeonato: hashtag tem que ter relação com o clip (#fyp/#viral não)
+        tags = [t for t in tags if t.lower().lstrip("#") not in ("fyp", "foryou", "foryoupage", "fy", "viral",
+                                                                 "viralvideo", "xyzbca", "tiktok")]
     gancho = (d.get("legenda") or "").strip()
     corpo = gancho if gancho and gancho != titulo else titulo
     faltam = [t for t in _tags_obrigatorias(canal) if t.lower() not in corpo.lower()]
@@ -191,8 +197,37 @@ def legenda(c: Clip) -> str:
     return f"{corpo}\n\n{credito}\n\n{' '.join(tags)}"
 
 
+def _canal_cfg(canal: str):
+    try:
+        from .config import load_config
+        for ch in load_config().channels:
+            if ch.name == canal:
+                return ch
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _campanha(canal: str) -> str:
+    try:
+        from .config import load_config
+        for ch in load_config().channels:
+            if ch.name == canal:
+                return ch.campanha
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
 def texto_txt(c: Clip, quando: datetime | None) -> str:
     linhas = []
+    camp = _campanha(canal_do(c))
+    if camp:
+        tags = " ".join(_tags_obrigatorias(canal_do(c)))
+        ch = _canal_cfg(canal_do(c))
+        marcar = f"  |  marque: {ch.marcar}" if ch is not None and ch.marcar else ""
+        linhas += [f"CAMPEONATO: {camp}  |  hashtag obrigatória: {tags}{marcar}",
+                   "Depois de postar, envie o link do post no site da campanha (as views contam no post original).", ""]
     if quando:
         linhas.append(f"POSTAR: {DIAS[quando.weekday()]} {quando:%d/%m} às {quando:%Hh%M}")
     else:
@@ -266,7 +301,27 @@ def renumerar(pasta: Path) -> None:
             t.with_suffix(".txt").rename(final.with_suffix(".txt"))
 
 
-def salvar_por_tipo(raiz: Path, c: Clip) -> Path:
+def momento_repetido(raiz: Path, c: Clip, janela: float = 60.0) -> bool:
+    """O mesmo momento já está na pasta do streamer? (live e VOD podem cortar o mesmo trecho; campeonato
+    desclassifica vídeo repetido). Guarda os momentos em <streamer>/.momentos.json."""
+    pico = c.dados.get("pico_epoch")
+    if not pico:
+        return False
+    idx = raiz / canal_do(c) / ".momentos.json"
+    try:
+        momentos = json.loads(idx.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        momentos = []
+    if any(abs(float(m) - float(pico)) < janela for m in momentos):
+        return True
+    idx.parent.mkdir(parents=True, exist_ok=True)
+    idx.write_text(json.dumps((momentos + [pico])[-3000:]), encoding="utf-8")
+    return False
+
+
+def salvar_por_tipo(raiz: Path, c: Clip) -> Path | None:
+    if momento_repetido(raiz, c):
+        return None
     pasta = pasta_tipo(raiz, c)
     pasta.mkdir(parents=True, exist_ok=True)
     base = nome_seguro(c.dados.get("titulo") or Path(c.nome).stem)
@@ -349,9 +404,15 @@ def main(argv: list[str] | None = None) -> int:
 
     # <streamer>/<dia> - novos | - já no YouTube, numerados do mais viral pro menos
     pastas: dict[Path, int] = {}
+    repetidos = 0
     for c in clips:
         pasta = salvar_por_tipo(raiz, c)
+        if pasta is None:
+            repetidos += 1
+            continue
         pastas[pasta] = pastas.get(pasta, 0) + 1
+    if repetidos:
+        print(f"  ({repetidos} clip(s) pulados: o mesmo momento já estava na pasta)")
     for pasta, n in sorted(pastas.items()):
         renumerar(pasta)
         print(f"  +{n:>2}  {pasta.relative_to(raiz)}")

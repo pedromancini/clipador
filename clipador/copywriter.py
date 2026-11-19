@@ -36,6 +36,7 @@ class ClipCopy:
     titulo_longo: str = ""           # título da versão horizontal (vídeo normal do YouTube)
     gameplay: bool | None = None     # a IA viu tela de jogo nos quadros? (None = não sabe / sem IA)
     gancho: str = ""                 # frase curta que aparece grande na tela nos primeiros segundos
+    participa: bool | None = None    # o streamer fala/reage no trecho? (None = não sabe)
 
 
 # ------------------------------------------------------------------ plano B (sem IA)
@@ -124,6 +125,8 @@ Regras:
   (ex.: "EU NÃO ACREDITO NISSO" - {canal} reage ao final da missão).
 - "legenda": 1 ou 2 frases curtas pro TikTok (gancho + uma pergunta que puxe comentários). Sem hashtags.
 - "sobre_gta6": true SÓ se o clip fala ou mostra GTA 6 / GTA VI de verdade.
+- "participa": true se "{canal}" participa ATIVAMENTE do trecho (fala, reage, comenta ou joga); false se
+  o trecho é só a transmissão/vídeo/jogo rolando sem reação dele.
 - "gameplay": true se os quadros mostram a TELA DE UM VIDEOGAME sendo jogado (gameplay, mapa, menu ou
   cutscene do jogo contam, mesmo com a câmera do streamer num canto); false se é câmera da vida real
   (evento presencial, IRL, rua, só o streamer conversando em tela cheia). Sem quadros: null.
@@ -131,7 +134,7 @@ Regras:
 - "viral": nota de 0 a 10 de potencial de viralizar (graça, surpresa, frase marcante, contexto que
   quem não conhece o streamer entende). Seja exigente: 8+ só para momentos realmente fortes.
 {idioma}
-Responda SÓ o JSON: {{"titulo": "...", "gancho": "...", "titulo_longo": "...", "legenda": "...", "sobre_gta6": false, "gameplay": true, "hashtags": ["#..."], "viral": 0}}"""
+Responda SÓ o JSON: {{"titulo": "...", "gancho": "...", "titulo_longo": "...", "legenda": "...", "sobre_gta6": false, "gameplay": true, "participa": true, "hashtags": ["#..."], "viral": 0}}"""
 
 
 IDIOMAS = {
@@ -286,7 +289,8 @@ class Copywriter:
                         hashtags=_hashtags(base_tags, channel, gta, extras, limite=8), fonte="gemini",
                         titulo_longo=longo[:85],
                         gancho=re.sub(r"[#\U0001F000-\U0001FFFF]", "", str(d.get("gancho") or "")).strip().upper()[:32],
-                        gameplay=d.get("gameplay") if isinstance(d.get("gameplay"), bool) and images else None)
+                        gameplay=d.get("gameplay") if isinstance(d.get("gameplay"), bool) and images else None,
+                        participa=d.get("participa") if isinstance(d.get("participa"), bool) else None)
 
     def make(self, channel: str, words, transcript: str, audio_path: Path | None, peak_offset: float,
              top_messages: list[tuple[str, int]], category: str | None, stream_title: str | None,

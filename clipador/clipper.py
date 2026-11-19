@@ -100,7 +100,8 @@ def watermark_filter(workdir: Path, texto: str, entrada: str, saida: str) -> str
 
 
 def editar_final(video: Path, workdir: Path, gancho: str = "", pico: float | None = None,
-                 watermark: str | None = None, zoom: bool = True, y_gancho: int = 700) -> Path:
+                 watermark: str | None = None, zoom: bool = True, y_gancho: int = 700,
+                 lower: str = "", y_lower: int = 548) -> Path:
     """Edição própria por cima do clip pronto:
     - zoom rápido (8%) por 1,4s no auge do momento;
     - frase gancho grande nos primeiros 2,5s;
@@ -120,6 +121,11 @@ def editar_final(video: Path, workdir: Path, gancho: str = "", pico: float | Non
     if watermark:
         vf += ";" + watermark_filter(workdir, watermark, atual, "[v2]")
         atual = "[v2]"
+    if lower:   # tarja com o nome embaixo do rosto, o vídeo inteiro
+        (workdir / "lower.txt").write_bytes(lower.strip().encode("utf-8"))
+        vf += (f";{atual}drawtext={font}textfile=lower.txt:fontsize=54:fontcolor=white:box=1:boxcolor=black@0.78:"
+               f"boxborderw=16:x=(w-text_w)/2:y={y_lower}[vl]")
+        atual = "[vl]"
     gancho = (gancho or "").strip()
     if gancho:
         palavras, linhas, linha = gancho.split(), [], ""
@@ -143,7 +149,7 @@ def editar_final(video: Path, workdir: Path, gancho: str = "", pico: float | Non
            "-movflags", "+faststart", str(tmp)]
     _run(cmd, cwd=workdir)
     shutil.move(str(tmp), video)
-    log.info("edição: zoom=%s gancho=%r marca=%s", bool(zoom and pico), gancho, bool(watermark))
+    log.info("edição: zoom=%s gancho=%r marca=%s lower=%r", bool(zoom and pico), gancho, bool(watermark), lower)
     return video
 
 

@@ -206,15 +206,19 @@ class ChannelRunner:
             texto = self.copy.make(self.ch.name, res.words, res.transcript, workdir / "audio.wav",
                                    max(0.0, peak.t - t0), peak.top_messages, info.category, info.title,
                                    self.hashtags, evitar=evitar, images=quadros, idioma=self.ch.idioma)
+            if self.ch.exige_participacao and texto.participa is False and not peak.forced:
+                log.info("clip #%d: %s não participa do trecho (regra do campeonato): descartado", n, self.ch.name)
+                res.path.unlink(missing_ok=True)
+                return
             if self.ch.so_gameplay and texto.gameplay is False and not peak.forced:
                 log.info("clip #%d não é gameplay (IRL/conversa) e o canal é só gameplay: descartado", n)
                 res.path.unlink(missing_ok=True)
                 return
             if self.ch.editar:
                 try:
-                    editar_final(res.path, workdir / "edit", texto.gancho if self.ch.edicao.get("gancho") else "",
-                                 max(0.0, peak.t - t0), self.ch.watermark, zoom=bool(self.ch.edicao.get("zoom_pico")),
-                                 y_gancho=700 if self.ch.layout == "facecam" else 300)
+                    editar_final(res.path, workdir / "edit", texto.gancho if (self.ch.edicao or {}).get("gancho") else "",
+                                 max(0.0, peak.t - t0), self.ch.watermark, zoom=bool((self.ch.edicao or {}).get("zoom_pico")),
+                                 y_gancho=700 if self.ch.layout == "facecam" else 300, lower=self.ch.lower)
                 except Exception as e:  # noqa: BLE001
                     log.warning("edição falhou (%s); clip vai sem ela", e)
                     if self.ch.watermark:   # a marca d'água é obrigatória: sem ela, não posta

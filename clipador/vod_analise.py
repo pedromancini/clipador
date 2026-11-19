@@ -127,6 +127,11 @@ def achar_vod(plataforma: str, canal: str, vod: str = "") -> Vod:
                cat, str(v.get("id") or ""))
 
 
+def ao_vivo_twitch(canal: str) -> bool:
+    d = _twitch({"query": f'query{{user(login:"{canal}"){{stream{{id}}}}}}'})
+    return bool((((d.get("data") or {}).get("user") or {}).get("stream")))
+
+
 # ------------------------------------------------------------------ sinais: chat
 def _amostra_twitch(vod: Vod, off: int) -> list[tuple[float, str]]:
     vid = vod.url.rstrip("/").split("/")[-1]
@@ -348,6 +353,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--candidatos", type=int, default=30, help="quantos momentos analisar com a IA")
     ap.add_argument("--out", default=str(ROOT / "clips"))
     ap.add_argument("--so-sinais", action="store_true", help="só lista os candidatos (não baixa nada)")
+    ap.add_argument("--pular-feitos", action="store_true",
+                    help="pula VOD já analisada (lista em state/vods_feitos.json) e live que ainda está no ar")
     ap.add_argument("--so-gameplay", action="store_true", help="descarta o que não é gameplay (mesmo se o canal não tiver so_gameplay)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
@@ -357,6 +364,21 @@ def main(argv: list[str] | None = None) -> int:
     plat, nome = parse_channel_ref(args.canal)
     ch = cfg.channel_or_default(plat, nome)
     vod = achar_vod(plat, nome, args.vod)
+    import os
+    estado = Path(os.environ.get("CLIPADOR_STATE_DIR") or ROOT / "state") / "vods_feitos.json"
+    vod_id = vod.live_id or vod.url.rstrip("/").split("/")[-1].split("?")[0]
+    feitos_antes: dict = {}
+    if args.pular_feitos:
+        try:
+            feitos_antes = json.loads(estado.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            feitos_antes = {}
+        if vod_id in feitos_antes.get(ch.slug, []):
+            log.info("VOD %s de %s já foi analisada; nada a fazer", vod_id, ch.slug)
+            return 0
+        if plat == "twitch" and ao_vivo_twitch(nome):
+            log.info("%s ainda está ao vivo: a VOD é analisada quando a live acabar", nome)
+            return 0
     log.info("VOD: %s (%s, %.0f min) %s", vod.url[:80], datetime.fromtimestamp(vod.inicio).strftime("%d/%m %H:%M"),
              vod.duracao / 60, vod.titulo[:60])
 
@@ -411,14 +433,18 @@ def main(argv: list[str] | None = None) -> int:
                 copy._falhas_seguidas = min(copy._falhas_seguidas, 4)
                 texto = copy.make(ch.name, res.words, res.transcript, wav if wav.exists() else None, 20.0,
                                   c.mensagens, vod.categoria, dica, tags, evitar=usados, images=quadros, idioma=ch.idioma)
+            if ch.exige_participacao and texto.participa is False:
+                log.info("candidato %d (%s): %s não participa do trecho: descartado", i, _hms(c.centro), ch.name)
+                res.path.unlink(missing_ok=True)
+                continue
             if (ch.so_gameplay or args.so_gameplay) and texto.gameplay is False:
                 log.info("candidato %d (%s) não é gameplay: descartado", i, _hms(c.centro))
                 res.path.unlink(missing_ok=True)
                 continue
             if ch.editar:
-                editar_final(res.path, w / "edit", texto.gancho if ch.edicao.get("gancho") else "", c.centro - t0,
-                             ch.watermark, zoom=bool(ch.edicao.get("zoom_pico")),
-                             y_gancho=700 if ch.layout == "facecam" else 300)
+                editar_final(res.path, w / "edit", texto.gancho if (ch.edicao or {}).get("gancho") else "", c.centro - t0,
+                             ch.watermark, zoom=bool((ch.edicao or {}).get("zoom_pico")),
+                             y_gancho=700 if ch.layout == "facecam" else 300, lower=ch.lower)
             texto.titulo = ch.titulo_com_tags(texto.titulo)
             texto.hashtags = ch.limpar_hashtags(texto.hashtags)
             usados.append(texto.titulo)
@@ -433,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
                      "youtube": None, "vod": f"{vod.url} @ {_hms(t0)}", "origem": "vod",
                      "sinais": {"views_clips": c.views, "chat": c.chat, "sinal": c.sinal, "final": final,
                                 "fontes": c.origem, "clip_publico": c.titulo_clip},
-                     "gameplay": texto.gameplay, "titulo_longo": texto.titulo_longo, "gancho": texto.gancho}
+                     "gameplay": texto.gameplay, "participa": texto.participa, "titulo_longo": texto.titulo_longo, "gancho": texto.gancho}
             out.with_suffix(".json").write_text(json.dumps(dados, ensure_ascii=False, indent=1), encoding="utf-8")
             feitos.append((final, dados, out))
             log.info("✅ %d/%d %s  nota %s  final %.2f  %s", i, len(cands), _hms(c.centro), texto.viral, final,
@@ -463,6 +489,11 @@ def main(argv: list[str] | None = None) -> int:
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
             f.write(rel + "\n\n")
     shutil.rmtree(work, ignore_errors=True)
+    if args.pular_feitos and feitos:
+        feitos_antes.setdefault(ch.slug, []).append(vod_id)
+        feitos_antes[ch.slug] = feitos_antes[ch.slug][-30:]
+        estado.parent.mkdir(parents=True, exist_ok=True)
+        estado.write_text(json.dumps(feitos_antes, indent=1), encoding="utf-8")
     return 0 if feitos else 1
 
 

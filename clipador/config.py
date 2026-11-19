@@ -123,10 +123,14 @@ class Channel:
     # edição própria: {"gancho": frase grande nos 1os 2,5s, "zoom_pico": zoom rápido no auge}
     edicao: dict | None = None
     idioma: str = ""           # "" = o de settings.language ("pt"); "en" = streamer gringo (fala + títulos em inglês)
+    campanha: str = ""         # campeonato/campanha de cortes (aparece no .txt do TikTok), ex.: "LOUD Coringa (ViewX)"
+    marcar: str = ""           # @ oficial do streamer que tem que ser marcado na legenda (regra de campeonato)
+    lower: str = ""            # tarja com o nome embaixo do rosto, o vídeo inteiro (ex.: "gabepeixe")
+    exige_participacao: bool = False   # descarta trecho em que o streamer não fala nem reage (regra de campeonato)
 
     @property
     def editar(self) -> bool:
-        return bool(self.edicao and (self.edicao.get("gancho") or self.edicao.get("zoom_pico")))
+        return bool(self.lower or (self.edicao and (self.edicao.get("gancho") or self.edicao.get("zoom_pico"))))
 
     def limpar_hashtags(self, tags: list[str]) -> list[str]:
         """Tira hashtag da OUTRA plataforma (ex.: #clipsdetwitch num streamer do Kick)."""
@@ -238,6 +242,10 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         so_gameplay=bool(raw.get("so_gameplay", False)),
         edicao=raw.get("edicao") if isinstance(raw.get("edicao"), dict) else None,
         idioma=str(raw.get("idioma") or "").strip().lower(),
+        campanha=str(raw.get("campanha") or "").strip(),
+        marcar=str(raw.get("marcar") or "").strip(),
+        lower=str(raw.get("lower") or "").strip(),
+        exige_participacao=bool(raw.get("exige_participacao", False)),
     )
     _validate_channel(ch, where)
     return ch

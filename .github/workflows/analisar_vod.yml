@@ -4,6 +4,10 @@
 name: analisar VOD
 
 on:
+  # campeonatos: 2x por dia analisa a última live encerrada de cada streamer (pula a que já foi feita)
+  schedule:
+    - cron: "0 13 * * *"   # 10h de Brasília
+    - cron: "0 22 * * *"   # 19h de Brasília
   workflow_dispatch:
     inputs:
       canais:
@@ -22,6 +26,10 @@ on:
         description: "Quantos momentos a IA analisa por streamer"
         required: false
         default: "30"
+      postar:
+        description: "No fim, postar os melhores no YouTube (só streamers liberados, no ritmo do canal)"
+        type: boolean
+        default: false
       so_gameplay:
         description: "Só gameplay (descarta conversa/IRL em todos os canais)"
         type: boolean
@@ -29,6 +37,7 @@ on:
 
 permissions:
   contents: read
+  actions: write   # dispara o postador do YouTube no fim
 
 jobs:
   setup:
@@ -38,7 +47,7 @@ jobs:
     steps:
       - id: m
         env:
-          CANAIS: ${{ inputs.canais }}
+          CANAIS: ${{ inputs.canais || 'kick/allanstag,kick/orenatovicente,twitch/kaicenat' }}
         run: |
           python3 -c "import json,os; print('canais='+json.dumps([c.strip() for c in os.environ['CANAIS'].split(',') if c.strip()]))" >> "$GITHUB_OUTPUT"
 
@@ -85,14 +94,23 @@ jobs:
           CANAL: ${{ matrix.canal }}
         run: echo "slug=$(echo "$CANAL" | tr '/' '-')" >> "$GITHUB_OUTPUT"
 
+      - name: VODs já analisadas deste streamer (das execuções anteriores)
+        uses: actions/cache@v6
+        with:
+          path: state
+          key: vods-${{ steps.nome.outputs.slug }}-${{ github.run_id }}
+          restore-keys: vods-${{ steps.nome.outputs.slug }}-
+
       - name: Analisar a VOD e gerar os clips
         env:
           CANAL: ${{ matrix.canal }}
           VOD: ${{ inputs.vod }}
-          MAX: ${{ inputs.max }}
-          CAND: ${{ inputs.candidatos }}
+          MAX: ${{ inputs.max || '20' }}
+          CAND: ${{ inputs.candidatos || '30' }}
           SO_GAMEPLAY: ${{ inputs.so_gameplay && '--so-gameplay' || '' }}
-        run: python -m clipador.vod_analise --canal "$CANAL" --vod "$VOD" --max "$MAX" --candidatos "$CAND" $SO_GAMEPLAY
+          PULAR: ${{ github.event_name == 'schedule' && '--pular-feitos' || '' }}
+          CLIPADOR_STATE_DIR: state
+        run: python -m clipador.vod_analise --canal "$CANAL" --vod "$VOD" --max "$MAX" --candidatos "$CAND" $SO_GAMEPLAY $PULAR
 
       - name: Clips (artifact, 3 dias)
         if: always()
@@ -105,3 +123,16 @@ jobs:
             clips/*.md
           retention-days: 3
           if-no-files-found: ignore
+
+  # Postagem automática: os melhores clips do dia vão pro YouTube (só streamers com "youtube" ligado,
+  # no ritmo de cada canal: espaçados, respeitando o teto de 24h; o postador espera e se re-dispara).
+  postar:
+    needs: analisar
+    if: always() && (github.event_name == 'schedule' || inputs.postar)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Disparar o postador do YouTube
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run postar_clips.yml -R "${{ github.repository }}"             -f run_id="${{ github.run_id }}" -f lista=auto -f intervalo=150 -f max=4 -f esperar_limite=true
