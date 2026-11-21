@@ -134,3 +134,19 @@ class TestEdicao(unittest.TestCase):
         editar_final(src, d / "w", "ELE NÃO ESPERAVA ISSO", 3.0, "kick.com/teste", zoom=True)
         self.assertAlmostEqual(media_duration(src), 6.0, delta=0.5)
         self.assertEqual((d / "w" / "gancho.txt").read_bytes().count(b"\r"), 0)
+
+
+class TestAudioLimpo(unittest.TestCase):
+    def test_config_e_aplicar_sem_flag(self):
+        from clipador import audio_limpo
+        d = tempfile.mkdtemp()
+        p = Path(d) / "channels.json"
+        p.write_text(json.dumps({"settings": {}, "channels": [
+            {"url": "https://kick.com/allanstag", "tirar_musica": True, "musica_resto": 0.2},
+            {"url": "https://kick.com/outro"}]}), encoding="utf-8")
+        c = load_config(p)
+        self.assertTrue(c.find("kick", "allanstag").tirar_musica)
+        self.assertEqual(c.find("kick", "allanstag").musica_resto, 0.2)
+        self.assertFalse(c.find("kick", "outro").tirar_musica)
+        # canal sem a opção: não mexe no arquivo (nem precisa existir)
+        audio_limpo.aplicar(c.find("kick", "outro"), Path(d) / "nao_existe.mp4", Path(d) / "w")

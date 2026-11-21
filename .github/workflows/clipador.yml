@@ -97,6 +97,23 @@ jobs:
           ffmpeg -hide_banner -filters | grep -q " subtitles " && echo "libass ok"
           which google-chrome || which chromium || echo "aviso: Chrome não encontrado (Kick pode falhar)"
 
+      - name: Demucs (tirar a música), só se o streamer usa
+        if: steps.live.outputs.live == 'true'
+        env:
+          CANAL_REF: ${{ matrix.platform }}/${{ matrix.name }}
+        run: |
+          if python -c "import sys; from clipador.config import load_config, parse_channel_ref; p, n = parse_channel_ref(sys.argv[1]); sys.exit(0 if load_config().channel_or_default(p, n).tirar_musica else 1)" "$CANAL_REF"; then
+            pip install -q torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+            pip install -q demucs==4.0.1
+          fi
+
+      - name: Cache do modelo do Demucs
+        if: steps.live.outputs.live == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/torch
+          key: demucs-htdemucs-v1
+
       - name: Cache do modelo Whisper
         if: steps.live.outputs.live == 'true'
         uses: actions/cache@v6

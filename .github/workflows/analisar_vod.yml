@@ -82,6 +82,21 @@ jobs:
           echo "/tmp/ff/bin" >> "$GITHUB_PATH"
           /tmp/ff/bin/ffmpeg -hide_banner -version | head -1
 
+      - name: Demucs (tirar a música), só se o streamer usa
+        env:
+          CANAL_REF: ${{ matrix.canal }}
+        run: |
+          if python -c "import sys; from clipador.config import load_config, parse_channel_ref; p, n = parse_channel_ref(sys.argv[1]); sys.exit(0 if load_config().channel_or_default(p, n).tirar_musica else 1)" "$CANAL_REF"; then
+            pip install -q torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+            pip install -q demucs==4.0.1
+          fi
+
+      - name: Cache do modelo do Demucs
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/torch
+          key: demucs-htdemucs-v1
+
       - name: Cache do modelo Whisper
         uses: actions/cache@v6
         with:

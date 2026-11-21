@@ -68,7 +68,7 @@
       "youtube_conta": "dante",
       "hashtags": ["#allanstag", "#cortes", "#kick", "#clips"], "marcar": "@allanstag",
       "horizontal": false,
-      "edicao": {"gancho": true, "zoom_pico": true},
+      "edicao": {"gancho": true, "zoom_pico": true}, "tirar_musica": true,
       "campanha": "Campeonato de Cortes Allan Stag (ViewX, até 19/12)",
       "enabled": true
     },
@@ -91,12 +91,12 @@
     {"url": "https://kick.com/orenatovicente", "kick_chatroom_id": 36201969, "layout": "facecam",
      "facecam": {"x": 0.756, "y": 0.06, "w": 0.24, "h": 0.25}, "youtube": false,
      "title_tags": ["#orenatovicente"], "watermark": "kick.com/orenatovicente", "marcar": "@orenatovicente",
-     "exige_participacao": true, "hashtags": ["#orenatovicente", "#cortes", "#kick"],
+     "exige_participacao": true, "tirar_musica": true, "hashtags": ["#orenatovicente", "#cortes", "#kick"],
      "edicao": {"gancho": true, "zoom_pico": true},
      "campanha": "Campeonato de Cortes Renato Vicente (ViewX, até 20/12)", "enabled": true},
     {"url": "https://www.twitch.tv/kaicenat", "layout": "facecam", "facecam": "auto", "idioma": "en",
      "youtube": false, "so_gta": true, "so_gameplay": true, "hashtags": ["#kaicenat", "#gta6", "#gtavi", "#gaming", "#clips"],
-     "edicao": {"gancho": true, "zoom_pico": true}, "campanha": "Kai Cenat GTA 6 (Whop Content Rewards)",
+     "edicao": {"gancho": true, "zoom_pico": true}, "campanha": "Kai Cenat GTA 6 (Whop Content Rewards)", "tirar_musica": true,
      "enabled": true},
     {"url": "https://www.twitch.tv/ricfazeres", "layout": "facecam", "facecam": "auto", "so_gta": true, "so_gameplay": true, "enabled": true}
   ]

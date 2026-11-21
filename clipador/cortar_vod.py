@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin
 
+from . import audio_limpo
 from .clipper import build_clip, editar_final
 from .recorder import ffmpeg_bin
 from .config import ROOT, load_config, parse_channel_ref
@@ -191,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         editar_final(out, work / "edit", (args.gancho or texto.gancho) if (ch.edicao or {}).get("gancho") else "", dur / 2,
                      ch.watermark, zoom=bool((ch.edicao or {}).get("zoom_pico")),
                      y_gancho=700 if ch.layout == "facecam" else 300, lower=ch.lower)
+    audio_limpo.aplicar(ch, out, work / "audio")
     texto.titulo = ch.titulo_com_tags(texto.titulo)
     texto.hashtags = ch.limpar_hashtags(texto.hashtags)
     print(f"TÍTULO: {texto.titulo}\nLEGENDA: {texto.legenda}\nHASHTAGS: {' '.join(texto.hashtags)}", flush=True)

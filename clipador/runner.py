@@ -24,7 +24,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
-from . import summary
+from . import audio_limpo, summary
 from .chat import make_chat_reader
 from .clipper import build_clip, build_horizontal, editar_final
 from .copywriter import _GTA6_RE, ClipCopy, Copywriter
@@ -223,6 +223,7 @@ class ChannelRunner:
                     log.warning("edição falhou (%s); clip vai sem ela", e)
                     if self.ch.watermark:   # a marca d'água é obrigatória: sem ela, não posta
                         raise
+            audio_limpo.aplicar(self.ch, res.path, workdir / "audio")
             repetido = _norm_titulo(texto.titulo) in {_norm_titulo(t) for t in evitar}
             self._titulos.append(texto.titulo)
             texto.titulo = self.ch.titulo_com_tags(texto.titulo)

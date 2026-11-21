@@ -69,7 +69,8 @@ def layout_filter(layout: str, fps: int, facecam: Facecam | None = None) -> str:
         return (
             f"[0:v]fps={fps},split=2[c][g];"
             f"[c]crop=iw*{fc.w:.4f}:ih*{fc.h:.4f}:iw*{fc.x:.4f}:ih*{fc.y:.4f},"
-            f"scale={W}:{cam_h}:force_original_aspect_ratio=increase,crop={W}:{cam_h},setsar=1[cam];"
+            f"scale={W}:{cam_h}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{cam_h},"
+            f"unsharp=5:5:0.7:5:5:0.0,setsar=1[cam];"   # a cam é um pedaço pequeno ampliado: lanczos + nitidez
             f"[g]scale={W}:{game_h}:force_original_aspect_ratio=increase,crop={W}:{game_h},setsar=1[game];"
             f"[cam][game]vstack=inputs=2,format=yuv420p[v]"
         )

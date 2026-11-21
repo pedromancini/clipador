@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from . import audio_limpo
 from .clipper import build_clip, editar_final
 from .config import ROOT, load_config, parse_channel_ref
 from .copywriter import Copywriter
@@ -445,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
                 editar_final(res.path, w / "edit", texto.gancho if (ch.edicao or {}).get("gancho") else "", c.centro - t0,
                              ch.watermark, zoom=bool((ch.edicao or {}).get("zoom_pico")),
                              y_gancho=700 if ch.layout == "facecam" else 300, lower=ch.lower)
+            audio_limpo.aplicar(ch, res.path, w / "audio")
             texto.titulo = ch.titulo_com_tags(texto.titulo)
             texto.hashtags = ch.limpar_hashtags(texto.hashtags)
             usados.append(texto.titulo)
