@@ -189,7 +189,7 @@ class ChannelRunner:
                 raise RuntimeError("nenhum segmento gravado cobre o trecho do pico (gravação parada?)")
             quando = datetime.fromtimestamp(peak.t).strftime("%Y%m%d-%H%M%S")
             out = self.out_dir / f"{self.ch.slug}_{quando}.mp4"
-            res = build_clip(segs, t0, t1 - t0, out, workdir, layout=self.ch.layout, facecam=self.ch.facecam,
+            res = build_clip(segs, t0, t1 - t0, out, workdir, layout=self.ch.layout, facecam=self.ch.facecam_para((self.info or StreamInfo(live=True)).category),
                              fps=int(self.s["fps"]), with_subtitles=True, burn_subtitles=bool(self.s["subtitles"]),
                              whisper_model=self.s["whisper_model"], language=self.ch.idioma or self.s["language"],
                              facecam_auto=self.ch.facecam_auto, facecam_last_good=self._facecam_last_good,

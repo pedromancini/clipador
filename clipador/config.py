@@ -130,6 +130,15 @@ class Channel:
     tirar_musica: bool = False # tira a música do áudio (Demucs) e deixa a voz: evita direitos autorais
     comentario: str = ""       # comentário automático em cada vídeo postado (ex.: link da live + @ do streamer)
     prioridade: float = 0.0    # pontos de nota a menos exigidos na disputa pelas vagas do canal do YouTube
+    # posição da cam por jogo (o streamer muda o layout conforme o jogo), ex.: {"Grand Theft Auto": {...}}
+    facecam_categoria: dict | None = None
+
+    def facecam_para(self, categoria: str | None) -> "Facecam | None":
+        """Cam do jogo atual (se o canal tem uma posição específica pra esse jogo), senão a padrão."""
+        for chave, fc in (self.facecam_categoria or {}).items():
+            if categoria and chave.lower() in categoria.lower():
+                return fc
+        return self.facecam
     musica_resto: float = 0.1  # quanto do resto do áudio (jogo/música) fica de fundo, 0 = só a voz
 
     @property
@@ -256,6 +265,7 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         tirar_musica=bool(raw.get("tirar_musica", False)),
         comentario=str(raw.get("comentario") or ""),
         prioridade=float(raw.get("prioridade", 0.0)),
+        facecam_categoria={k: Facecam(**v) for k, v in (raw.get("facecam_categoria") or {}).items()} or None,
         musica_resto=float(raw.get("musica_resto", 0.1)),
     )
     _validate_channel(ch, where)

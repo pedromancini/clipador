@@ -147,6 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--privacy", default=None, choices=["public", "unlisted", "private"])
     ap.add_argument("--out", default=str(ROOT / "clips"))
     ap.add_argument("--vod-inicio", default="", help="hora UTC em que o VOD começou (só p/ link .m3u8)")
+    ap.add_argument("--categoria", default="", help="jogo da live (só p/ link .m3u8; escolhe a posição da cam)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
 
@@ -167,12 +168,13 @@ def main(argv: list[str] | None = None) -> int:
 
     info = info or vod_inicio_epoch(vod)
     if not info and args.vod_inicio:
-        info = (datetime.fromisoformat(args.vod_inicio.replace("Z", "+00:00")).timestamp(), None, None)
+        info = (datetime.fromisoformat(args.vod_inicio.replace("Z", "+00:00")).timestamp(), None,
+                args.categoria or None)
     base_epoch, titulo_live, categoria = info if info else (time.time(), None, None)
     quando = datetime.fromtimestamp(base_epoch + inicio, timezone.utc)
     out = Path(args.out) / f"{ch.slug}_{quando:%Y%m%d-%H%M%S}.mp4"
 
-    res = build_clip([(0.0, src)], 0.0, dur, out, work / "clip", layout=ch.layout, facecam=ch.facecam,
+    res = build_clip([(0.0, src)], 0.0, dur, out, work / "clip", layout=ch.layout, facecam=ch.facecam_para(categoria),
                      fps=int(s["fps"]), with_subtitles=True, burn_subtitles=bool(s["subtitles"]), whisper_model=s["whisper_model"],
                      language=ch.idioma or s["language"], facecam_auto=ch.facecam_auto,
                      sub_size=int(s["subtitle_size"]), sub_position=s["subtitle_position"],

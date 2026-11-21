@@ -417,7 +417,7 @@ def main(argv: list[str] | None = None) -> int:
             baixar(vod.url, int(t0), int(dur) + 2, src)
             quando = datetime.fromtimestamp(vod.inicio + c.centro, timezone.utc)
             out = out_dir / f"{ch.slug}_{quando:%Y%m%d-%H%M%S}.mp4"
-            res = build_clip([(0.0, src)], 0.0, dur, out, w / "clip", layout=ch.layout, facecam=ch.facecam,
+            res = build_clip([(0.0, src)], 0.0, dur, out, w / "clip", layout=ch.layout, facecam=ch.facecam_para(vod.categoria),
                              fps=int(s["fps"]), with_subtitles=True, burn_subtitles=bool(s["subtitles"]),
                              whisper_model=s["whisper_model"], language=ch.idioma or s["language"],
                              facecam_auto=ch.facecam_auto, watermark=None if ch.editar else ch.watermark,
