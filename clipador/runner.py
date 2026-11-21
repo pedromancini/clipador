@@ -311,7 +311,8 @@ class ChannelRunner:
                 if repetido:
                     return "⏭️ YouTube: a IA repetiu um título que já está no canal"
                 cs = self.yt.conta_stats()
-                dc = decide_conta(ys, self.ch.youtube_conta, cs, texto.viral, texto.fonte, extremo=d.extreme)
+                dc = decide_conta(ys, self.ch.youtube_conta, cs, texto.viral, texto.fonte, extremo=d.extreme,
+                                  bonus=self.ch.prioridade)
                 if not dc.post:
                     log.info("YouTube: não postado (%s)", dc.reason)
                     return f"⏭️ YouTube: {dc.reason}"
@@ -319,6 +320,8 @@ class ChannelRunner:
                                   self.ch.platform, ys["category_id"], ys["privacy"], ys["made_for_kids"],
                                   hook=texto.legenda if texto.legenda != texto.titulo else None)
             url = self.yt.upload(res.path, meta, self.ch.platform, self.ch.name)
+            if self.ch.comentario:
+                self.yt.comentar(url, self.ch.comentario)
             extra = " 🔥 post extra" if d.extreme else ""
             linha = f"▶️ Postado no YouTube ({st.today + 1}º hoje, {d.reason}){extra}: {url}"
             if not peak.forced:

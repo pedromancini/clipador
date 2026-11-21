@@ -32,7 +32,8 @@ log = logging.getLogger("clipador.youtube")
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 API = "https://www.googleapis.com/youtube/v3"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly",
+          "https://www.googleapis.com/auth/youtube.force-ssl"]   # force-ssl = comentar nos próprios vídeos
 
 from .config import DEFAULT_YOUTUBE as DEFAULT_YT_SETTINGS  # noqa: E402,F401
 
@@ -172,14 +173,14 @@ def viral_minimo(yt_settings: dict, usados: int, teto: int) -> float:
 
 
 def decide_conta(yt_settings: dict, conta: str, cs: ContaStats, viral: float | None, fonte: str,
-                 extremo: bool = False) -> PostDecision:
+                 extremo: bool = False, bonus: float = 0.0) -> PostDecision:
     """Filtro do canal do YouTube inteiro: vaga nas 24h, qualidade do título e nota de viral."""
     teto = conta_teto(yt_settings, conta)
     if cs.ult24h >= teto:
         return PostDecision(False, f"canal do YouTube cheio ({cs.ult24h}/{teto} envios nas últimas 24h)")
     if fonte != "gemini" or viral is None:
         return PostDecision(False, "título reserva (sem IA): não posto pra não repetir título genérico")
-    minimo = viral_minimo(yt_settings, cs.ult24h, teto) - (1.0 if extremo else 0.0)
+    minimo = viral_minimo(yt_settings, cs.ult24h, teto) - (1.0 if extremo else 0.0) - bonus
     if viral < minimo:
         return PostDecision(False, f"nota {viral:g} < {minimo:g} (canal com {cs.ult24h}/{teto} em 24h: "
                                    "vaga guardada pros melhores momentos)")
@@ -356,6 +357,31 @@ class YouTube:
     def _increment(self, platform: str, name: str) -> None:
         with self._lock:
             self._post_times.setdefault(marker(platform, name), []).append(time.time())
+
+    # ---------------------------------------------------------------- comentário
+    def comentar(self, url_ou_id: str, texto: str) -> bool:
+        """Comenta no vídeo (ex.: link da live + @ do streamer). Precisa da permissão youtube.force-ssl
+        (rodar o youtube_auth de novo); sem ela, avisa uma vez e segue sem comentar."""
+        if getattr(self, "_sem_permissao_comentar", False) or not texto.strip():
+            return False
+        vid = url_ou_id.rstrip("/").split("/")[-1].split("=")[-1]
+        try:
+            r = requests.post("https://www.googleapis.com/youtube/v3/commentThreads", params={"part": "snippet"},
+                              headers={"Authorization": f"Bearer {self._token()}"},
+                              json={"snippet": {"videoId": vid, "topLevelComment": {"snippet": {"textOriginal": texto}}}},
+                              timeout=30)
+        except requests.RequestException as e:
+            log.warning("comentário falhou: %s", e)
+            return False
+        if r.status_code in (200, 201):
+            log.info("comentado em %s", vid)
+            return True
+        if r.status_code == 403 and ("insufficient" in r.text.lower() or "scope" in r.text.lower()):
+            self._sem_permissao_comentar = True
+            log.warning("sem permissão pra comentar (rode o youtube_auth de novo pra liberar comentários)")
+        else:
+            log.warning("comentário recusado: %s %s", r.status_code, r.text[:200])
+        return False
 
     # ---------------------------------------------------------------- upload
     def upload(self, path: Path | str, metadata: dict, platform: str, name: str) -> str:

@@ -128,6 +128,8 @@ class Channel:
     lower: str = ""            # tarja com o nome embaixo do rosto, o vídeo inteiro (ex.: "gabepeixe")
     exige_participacao: bool = False   # descarta trecho em que o streamer não fala nem reage (regra de campeonato)
     tirar_musica: bool = False # tira a música do áudio (Demucs) e deixa a voz: evita direitos autorais
+    comentario: str = ""       # comentário automático em cada vídeo postado (ex.: link da live + @ do streamer)
+    prioridade: float = 0.0    # pontos de nota a menos exigidos na disputa pelas vagas do canal do YouTube
     musica_resto: float = 0.1  # quanto do resto do áudio (jogo/música) fica de fundo, 0 = só a voz
 
     @property
@@ -249,6 +251,8 @@ def _parse_channel(raw: dict[str, Any], idx: int) -> Channel:
         lower=str(raw.get("lower") or "").strip(),
         exige_participacao=bool(raw.get("exige_participacao", False)),
         tirar_musica=bool(raw.get("tirar_musica", False)),
+        comentario=str(raw.get("comentario") or ""),
+        prioridade=float(raw.get("prioridade", 0.0)),
         musica_resto=float(raw.get("musica_resto", 0.1)),
     )
     _validate_channel(ch, where)

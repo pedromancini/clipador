@@ -150,3 +150,20 @@ class TestAudioLimpo(unittest.TestCase):
         self.assertFalse(c.find("kick", "outro").tirar_musica)
         # canal sem a opção: não mexe no arquivo (nem precisa existir)
         audio_limpo.aplicar(c.find("kick", "outro"), Path(d) / "nao_existe.mp4", Path(d) / "w")
+
+
+
+class TestPrioridadeEComentario(unittest.TestCase):
+    def test_prioridade_baixa_a_nota_exigida(self):
+        cs = ContaStats(ult24h=9, min_desde_ultimo=60)          # última vaga: exige 8.5
+        self.assertFalse(decide_conta(YS, "", cs, 8.0, "gemini").post)
+        self.assertTrue(decide_conta(YS, "", cs, 8.0, "gemini", bonus=1.0).post)
+
+    def test_comentar_sem_permissao_avisa_uma_vez(self):
+        yt = YouTube("id", "sec", "tok")
+        r = mock.Mock(status_code=403, text='{"error": {"errors": [{"reason": "insufficientPermissions"}]}}')
+        with mock.patch.object(yt, "_token", return_value="t"), mock.patch("requests.post", return_value=r) as post:
+            self.assertFalse(yt.comentar("https://youtube.com/shorts/abc123", "ao vivo: kick.com/allanstag"))
+            self.assertFalse(yt.comentar("https://youtube.com/shorts/def456", "x"))
+            self.assertEqual(post.call_count, 1)                 # não insiste depois do 403
+            self.assertEqual(post.call_args.kwargs["json"]["snippet"]["videoId"], "abc123")

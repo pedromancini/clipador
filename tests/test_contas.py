@@ -51,9 +51,12 @@ class TestContas(unittest.TestCase):
 
     def test_channels_json_do_repo(self):
         c = load_config()
-        self.assertEqual(c.find("kick", "allanstag").youtube_conta, "dante")
+        # allanstag posta no canal principal (GTA VI Clips); o Dante virou o canal gringo (Kai Cenat)
+        self.assertEqual(c.find("kick", "allanstag").youtube_conta, "")
+        self.assertEqual(c.find("twitch", "kaicenat").youtube_conta, "dante")
         self.assertEqual(c.find("twitch", "alanzoka").youtube_conta, "")
-        self.assertEqual(conta_do({"arquivo": "kick-allanstag_20261118-210000.mp4"}), "dante")
+        self.assertEqual(conta_do({"arquivo": "twitch-kaicenat_20261118-210000.mp4"}), "dante")
+        self.assertEqual(conta_do({"arquivo": "kick-allanstag_20261118-210000.mp4"}), "")
         self.assertEqual(conta_do({"arquivo": "twitch-alanzoka_20261118-210000.mp4"}), "")
 
 

@@ -170,6 +170,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             try:
                 url = yt.upload(video, meta, platform, name)
+                ch_cfg = load_config().channel_or_default(platform, name)
+                if ch_cfg.comentario:
+                    yt.comentar(url, ch_cfg.comentario)
                 print(f"▶️ {i + 1}/{len(lista)} {meta['snippet']['title']}  {url}", flush=True)
                 ja_postados[conta].add(meta["snippet"]["title"].replace("#Shorts", "").strip().lower())
                 postados += 1
