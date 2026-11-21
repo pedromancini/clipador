@@ -65,7 +65,8 @@ def main(argv: list[str] | None = None) -> int:
     state = secrets.token_urlsafe(16)
     url = AUTH_URL + "?" + urllib.parse.urlencode({
         "client_id": client_id, "redirect_uri": redirect, "response_type": "code",
-        "scope": " ".join(SCOPES), "access_type": "offline", "prompt": "consent",
+        "scope": " ".join(SCOPES), "access_type": "offline",
+        "prompt": "select_account consent",   # sempre mostra a escolha de conta/canal (vários canais na mesma conta)
         "code_challenge": challenge, "code_challenge_method": "S256", "state": state,
     })
 
@@ -121,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         nome = f"(não consegui conferir: {e})"
 
     print("\n✅ Autorizado! Canal do YouTube:", nome)
+    print("   (se não for o canal que você queria, rode de novo e escolha o outro canal na tela do Google)")
     if conta:
         print("\nColoque este secret no GitHub (Settings > Secrets and variables > Actions):\n")
         print(f"  YOUTUBE_REFRESH_TOKEN{suf}  = {refresh}")
