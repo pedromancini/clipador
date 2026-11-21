@@ -318,7 +318,7 @@ class ChannelRunner:
                     return f"⏭️ YouTube: {dc.reason}"
             meta = build_metadata(texto.titulo, self.ch.name, self.ch.platform_label, self.ch.url, texto.hashtags,
                                   self.ch.platform, ys["category_id"], ys["privacy"], ys["made_for_kids"],
-                                  hook=texto.legenda if texto.legenda != texto.titulo else None)
+                                  hook=texto.legenda if texto.legenda != texto.titulo else None, idioma=self.ch.idioma)
             url = self.yt.upload(res.path, meta, self.ch.platform, self.ch.name)
             if self.ch.comentario:
                 self.yt.comentar(url, self.ch.comentario)
@@ -357,7 +357,8 @@ class ChannelRunner:
             titulo = self.ch.titulo_com_tags(titulo[: 100 - len(serie)].rstrip() + serie, limite=100)
             meta = build_metadata(titulo, self.ch.name, self.ch.platform_label, self.ch.url, texto.hashtags,
                                   self.ch.platform, ys["category_id"], ys["privacy"], ys["made_for_kids"],
-                                  hook=texto.legenda if texto.legenda != texto.titulo else None, short=False)
+                                  hook=texto.legenda if texto.legenda != texto.titulo else None, short=False,
+                                  idioma=self.ch.idioma)
             meta["snippet"]["description"] = meta["snippet"]["description"].replace(
                 marker(self.ch.platform, self.ch.name), f"clipador:horizontal/{self.ch.name}")
             return self.yt.upload(video, meta, "horizontal", self.ch.name)

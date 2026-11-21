@@ -206,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             meta = build_metadata(texto.titulo, ch.name, ch.platform_label, ch.url, texto.hashtags, ch.platform,
                                   ys["category_id"], args.privacy or ys["privacy"], ys["made_for_kids"],
-                                  hook=texto.legenda if texto.legenda != texto.titulo else None)
+                                  hook=texto.legenda if texto.legenda != texto.titulo else None, idioma=ch.idioma)
             # marca "extra": não conta no limite de 2/h do monitoramento ao vivo
             meta["snippet"]["description"] = meta["snippet"]["description"].replace(
                 f"clipador:{ch.platform}/{ch.name}", f"clipador:extra/{ch.name}")

@@ -40,7 +40,7 @@ def metadados(item: dict, settings: dict) -> tuple[dict, str, str]:
     tags = ch.limpar_hashtags(list(tags))   # garante a hashtag obrigatória do campeonato na descrição
     meta = build_metadata(ch.titulo_com_tags(item["titulo"]), ch.name, ch.platform_label, ch.url, tags, platform,
                           ys["category_id"], item.get("privacy") or ys["privacy"], ys["made_for_kids"],
-                          hook=legenda if legenda and legenda != item["titulo"] else None)
+                          hook=legenda if legenda and legenda != item["titulo"] else None, idioma=ch.idioma)
     desc = meta["snippet"]["description"]
     meta["snippet"]["description"] = desc.replace(marker(platform, ch.name), marker("extra", ch.name))
     return meta, platform, name
