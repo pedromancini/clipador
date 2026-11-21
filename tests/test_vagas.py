@@ -167,3 +167,15 @@ class TestPrioridadeEComentario(unittest.TestCase):
             self.assertFalse(yt.comentar("https://youtube.com/shorts/def456", "x"))
             self.assertEqual(post.call_count, 1)                 # não insiste depois do 403
             self.assertEqual(post.call_args.kwargs["json"]["snippet"]["videoId"], "abc123")
+
+
+
+class TestHashtagObrigatoria(unittest.TestCase):
+    def test_vai_pra_descricao_mesmo_se_a_ia_esquecer(self):
+        from clipador.postar_lote import metadados
+        cfg = load_config()
+        item = {"arquivo": "kick-allanstag_20261120-010000.mp4", "titulo": "GTA 6: que batida",
+                "hashtags": ["#gta6", "#cortes"]}
+        m, _, _ = metadados(item, cfg.settings)
+        self.assertIn("#allanstag", m["snippet"]["title"])
+        self.assertIn("#allanstag", m["snippet"]["description"])

@@ -139,7 +139,10 @@ class Channel:
     def limpar_hashtags(self, tags: list[str]) -> list[str]:
         """Tira hashtag da OUTRA plataforma (ex.: #clipsdetwitch num streamer do Kick)."""
         outra = "kick" if self.platform == "twitch" else "twitch"
-        return [t for t in tags if outra not in t.lower()]
+        tags = [t for t in tags if outra not in t.lower()]
+        # hashtag obrigatória do campeonato sempre na lista (vai pra descrição do YouTube e legenda do TikTok)
+        faltam = [t for t in (self.title_tags or []) if t.lower() not in {x.lower() for x in tags}]
+        return faltam + tags
 
     def titulo_com_tags(self, titulo: str, limite: int = 91) -> str:
         """Garante as hashtags obrigatórias no título (cabendo no limite do YouTube com ' #Shorts')."""

@@ -37,6 +37,7 @@ def metadados(item: dict, settings: dict) -> tuple[dict, str, str]:
     tags = item.get("hashtags") or [f"#{name}"] + [t for t in (ch.hashtags or settings.get("hashtags", []))
                                                   if "gta" not in t]
     legenda = (item.get("legenda") or "").strip()
+    tags = ch.limpar_hashtags(list(tags))   # garante a hashtag obrigatória do campeonato na descrição
     meta = build_metadata(ch.titulo_com_tags(item["titulo"]), ch.name, ch.platform_label, ch.url, tags, platform,
                           ys["category_id"], item.get("privacy") or ys["privacy"], ys["made_for_kids"],
                           hook=legenda if legenda and legenda != item["titulo"] else None)
