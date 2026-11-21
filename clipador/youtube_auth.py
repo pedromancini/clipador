@@ -17,6 +17,7 @@ import base64
 import hashlib
 import http.server
 import json
+from pathlib import Path
 import secrets
 import socket
 import sys
@@ -39,9 +40,14 @@ def _porta_livre() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
-    if not argv:
-        print(__doc__)
-        return 2
+    # sem o caminho do client_secret (ou só o nome da conta): usa o client_secret*.json da pasta do projeto
+    if not argv or not Path(argv[0]).is_file():
+        achados = sorted(Path(".").glob("client_secret*.json")) or sorted(
+            Path(__file__).resolve().parent.parent.glob("client_secret*.json"))
+        if not achados:
+            print(__doc__)
+            return 2
+        argv = [str(achados[0]), *argv]
     conta = argv[1].strip().lower() if len(argv) > 1 else ""
     suf = f"_{conta.upper()}" if conta else ""
     with open(argv[0], encoding="utf-8") as f:
